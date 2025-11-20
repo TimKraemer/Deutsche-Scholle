@@ -8,14 +8,13 @@ export const mockGardens: Garden[] = [
   {
     id: 'garden-1050',
     number: '1050',
-    parcel: 'Erster Zug',
-    size: 300, // m²
+    parcel: 'Klostergärten 1',
+    size: 375, // m²
     availableFrom: '2025-01-01',
-    valuation: 15000, // €
-    valueReduction: 2000, // €
+    valuation: 1680, // €
+    valueReduction: 45, // €
     hasElectricity: true,
-    waterConnection: 'wasserleitung',
-    coordinates: [52.2799, 8.0472], // Näherungswert für Deutsche Scholle Osnabrück
+    waterConnection: 'brunnen',
     osmWayId: 1412612288,
   },
 ];

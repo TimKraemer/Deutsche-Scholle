@@ -57,14 +57,208 @@ export async function loadGardenByWayId(wayId: number): Promise<OSMWay | null> {
     }
 
     return null;
-  } catch (error) {
-    console.error('Error loading garden by way ID:', error);
+  } catch (error: any) {
+    if (error.name !== 'AbortError') {
+      console.error('Error loading garden by way ID:', error);
+    }
     const staleCache = getFromCache<OSMWay>(cacheKey);
     if (staleCache) {
       return staleCache;
     }
     return null;
   }
+}
+
+/**
+ * Findet die umschließende Parzelle für einen Garten
+ * Sucht nach übergeordneten Ways oder Relations mit allotments=allotments oder allotments=site
+ */
+export async function findEnclosingParcel(gardenWay: OSMWay): Promise<string | null> {
+  if (!gardenWay.geometry || gardenWay.geometry.length === 0) {
+    return null;
+  }
+
+  // Berechne Bounds des Gartens
+  const lats = gardenWay.geometry.map(p => p.lat);
+  const lons = gardenWay.geometry.map(p => p.lon);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLon = Math.min(...lons);
+  const maxLon = Math.max(...lons);
+
+  // Erweitere Bounds leicht für die Suche
+  const searchMargin = 0.001; // ~100m
+  const searchMinLat = minLat - searchMargin;
+  const searchMaxLat = maxLat + searchMargin;
+  const searchMinLon = minLon - searchMargin;
+  const searchMaxLon = maxLon + searchMargin;
+
+  // Suche nach übergeordneten Parzellen
+  // 1. Suche nach allotments=allotments oder allotments=site (übergeordnete Parzellen)
+  // 2. Suche auch nach allotments=plot mit Namen (könnten größere Parzellen sein wie "Klostergärten 1")
+  // 3. Suche nach Relations die Parzellen beschreiben
+  const query = `
+    [out:json][timeout:15];
+    (
+      way["allotments"~"^(allotments|site)$"]["name"](${searchMinLat},${searchMinLon},${searchMaxLat},${searchMaxLon});
+      way["allotments"="plot"]["name"](${searchMinLat},${searchMinLon},${searchMaxLat},${searchMaxLon});
+      relation["allotments"~"^(allotments|site)$"]["name"](${searchMinLat},${searchMinLon},${searchMaxLat},${searchMaxLon});
+      relation["allotments"="plot"]["name"](${searchMinLat},${searchMinLon},${searchMaxLat},${searchMaxLon});
+    );
+    out geom;
+  `;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 Sekunden Timeout
+    
+    const response = await fetch(OVERPASS_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: `data=${encodeURIComponent(query)}`,
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data: OSMResponse = await response.json();
+    
+    if (data.elements && data.elements.length > 0) {
+      // Berechne Mittelpunkt des Gartens
+      const gardenCenter = {
+        lat: (minLat + maxLat) / 2,
+        lon: (minLon + maxLon) / 2,
+      };
+
+      // Filtere zuerst: Ausschluss des Gartens selbst
+      const gardenWayId = gardenWay.id;
+      const gardenArea = (maxLat - minLat) * (maxLon - minLon); // Ungefähre Fläche des Gartens
+      
+      // Berechne Fläche für jedes Element
+      const elementsWithArea = data.elements.map(element => {
+        if (!element.geometry || element.geometry.length === 0) {
+          return { element, area: 0 };
+        }
+        const elLats = element.geometry.map((p: { lat: number; lon: number }) => p.lat);
+        const elLons = element.geometry.map((p: { lat: number; lon: number }) => p.lon);
+        const area = (Math.max(...elLats) - Math.min(...elLats)) * (Math.max(...elLons) - Math.min(...elLons));
+        return { element, area };
+      });
+      
+      // Filtere: Ausschluss des Gartens selbst
+      // Behalte:
+      // - Elemente mit allotments=allotments oder allotments=site (übergeordnete Parzellen)
+      // - Elemente mit allotments=plot die deutlich größer sind als der Garten (mindestens 2x)
+      // - Elemente ohne allotments Tag die deutlich größer sind (könnten Parzellen sein)
+      const filteredElements = elementsWithArea
+        .filter(({ element, area }) => {
+          // Ausschluss des Gartens selbst
+          if (element.id === gardenWayId) {
+            return false;
+          }
+          
+          const allotmentsTag = element.tags?.allotments;
+          
+          // Behalte übergeordnete Parzellen-Tags
+          if (allotmentsTag === 'allotments' || allotmentsTag === 'site') {
+            return true;
+          }
+          
+          // Für allotments=plot: Nur behalten wenn deutlich größer (mindestens 2x)
+          if (allotmentsTag === 'plot') {
+            return area > gardenArea * 2;
+          }
+          
+          // Für Elemente ohne allotments Tag: Nur behalten wenn deutlich größer (könnten Parzellen sein)
+          // Aber ausschließen wenn es Straßen sind (haben highway Tag)
+          if (element.tags?.highway) {
+            return false;
+          }
+          
+          // Andere Elemente ohne allotments: Nur wenn deutlich größer
+          return area > gardenArea * 3; // Höhere Schwelle für unbekannte Tags
+        })
+        .map(({ element, area }) => ({ element, area }));
+
+      // Sortiere nach Fläche (größte zuerst) - größere Parzellen haben Vorrang
+      filteredElements.sort((a, b) => b.area - a.area);
+
+      // Finde die Parzelle, die den Garten umschließt
+      // Prüfe ob der Garten innerhalb der Parzelle liegt
+      for (const { element } of filteredElements) {
+        if (element.geometry && element.geometry.length > 0) {
+          const isInside = isPointInPolygon(gardenCenter, element.geometry);
+          
+          if (isInside) {
+            return element.tags.name || null;
+          }
+        }
+      }
+      
+      // Fallback: Wenn keine gefilterte Parzelle gefunden wurde, suche nach größtem Polygon
+      // das den Garten umschließt (auch wenn es allotments=plot hat, aber größer ist)
+      let largestEnclosing: { element: any; area: number } | null = null;
+      
+      for (const element of data.elements) {
+        if (element.id === gardenWayId) continue; // Überspringe Garten selbst
+        
+        if (element.geometry && element.geometry.length > 0) {
+          const isInside = isPointInPolygon(gardenCenter, element.geometry);
+          if (isInside) {
+            // Berechne ungefähre Fläche des Polygons
+            const lats = element.geometry.map((p: { lat: number; lon: number }) => p.lat);
+            const lons = element.geometry.map((p: { lat: number; lon: number }) => p.lon);
+            const area = (Math.max(...lats) - Math.min(...lats)) * (Math.max(...lons) - Math.min(...lons));
+            
+            if (!largestEnclosing || area > largestEnclosing.area) {
+              largestEnclosing = { element, area };
+            }
+          }
+        }
+      }
+      
+      if (largestEnclosing && largestEnclosing.element.tags?.name) {
+        return largestEnclosing.element.tags.name;
+      }
+      
+      // Fallback: Nimm die erste gefundene Parzelle mit Name
+      const firstParcelWithName = data.elements.find(el => el.tags?.name);
+      if (firstParcelWithName) {
+        return firstParcelWithName.tags.name || null;
+      }
+    }
+
+    return null;
+  } catch (error: any) {
+    if (error.name !== 'AbortError') {
+      console.error('Error finding enclosing parcel:', error);
+    }
+    return null;
+  }
+}
+
+/**
+ * Einfache Punkt-in-Polygon-Prüfung
+ */
+function isPointInPolygon(point: { lat: number; lon: number }, polygon: Array<{ lat: number; lon: number }>): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lon;
+    const yi = polygon[i].lat;
+    const xj = polygon[j].lon;
+    const yj = polygon[j].lat;
+    
+    const intersect = ((yi > point.lat) !== (yj > point.lat)) &&
+      (point.lon < (xj - xi) * (point.lat - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }
 
 /**
@@ -82,7 +276,7 @@ export async function searchGardenByNumber(gardenNumber: string): Promise<OSMWay
   // Overpass Query: Suche nach allotments=plot mit name=gardenNumber
   // Suche im Bereich Osnabrück (Bounding Box)
   const query = `
-    [out:json][timeout:25];
+    [out:json][timeout:15];
     (
       way["allotments"="plot"]["name"="${gardenNumber}"](52.2,7.9,52.35,8.15);
     );
@@ -90,13 +284,19 @@ export async function searchGardenByNumber(gardenNumber: string): Promise<OSMWay
   `;
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 Sekunden Timeout
+    
     const response = await fetch(OVERPASS_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: `data=${encodeURIComponent(query)}`,
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       throw new Error(`Overpass API error: ${response.statusText}`);
@@ -112,12 +312,13 @@ export async function searchGardenByNumber(gardenNumber: string): Promise<OSMWay
     }
 
     return null;
-  } catch (error) {
-    console.error('Error searching garden in OSM:', error);
+  } catch (error: any) {
+    if (error.name !== 'AbortError') {
+      console.error('Error searching garden in OSM:', error);
+    }
     // Bei Fehler: Versuche aus Cache zu laden (auch wenn abgelaufen)
     const staleCache = getFromCache<OSMWay>(cacheKey);
     if (staleCache) {
-      console.log('Using stale cache for garden', gardenNumber);
       return staleCache;
     }
     return null;
@@ -137,7 +338,7 @@ export async function loadAllGardens(): Promise<OSMWay[]> {
 
   // Overpass Query: Lade alle allotments=plot im Bereich
   const query = `
-    [out:json][timeout:25];
+    [out:json][timeout:15];
     (
       way["allotments"="plot"](52.2,7.9,52.35,8.15);
     );
@@ -145,13 +346,19 @@ export async function loadAllGardens(): Promise<OSMWay[]> {
   `;
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 Sekunden Timeout
+    
     const response = await fetch(OVERPASS_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: `data=${encodeURIComponent(query)}`,
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       throw new Error(`Overpass API error: ${response.statusText}`);
@@ -166,8 +373,10 @@ export async function loadAllGardens(): Promise<OSMWay[]> {
     }
     
     return gardens;
-  } catch (error) {
-    console.error('Error loading all gardens from OSM:', error);
+  } catch (error: any) {
+    if (error.name !== 'AbortError') {
+      console.error('Error loading all gardens from OSM:', error);
+    }
     // Bei Fehler: Versuche aus Cache zu laden (auch wenn abgelaufen)
     const staleCache = getFromCache<OSMWay[]>(CacheKeys.ALL_GARDENS);
     if (staleCache && staleCache.length > 0) {
@@ -233,8 +442,11 @@ function calculatePolygonArea(geometry: Array<{ lat: number; lon: number }>): nu
 
 /**
  * Konvertiert OSM Way zu Garden-Format
+ * @param osmWay Der OSM Way für den Garten
+ * @param mockData Optionale Mock-Daten aus der Datenbank
+ * @param enclosingParcel Die umschließende Parzelle aus OSM (optional)
  */
-export function osmWayToGarden(osmWay: OSMWay, mockData?: Partial<Garden>): Garden | null {
+export function osmWayToGarden(osmWay: OSMWay, mockData?: Partial<Garden>, enclosingParcel?: string | null): Garden | null {
   if (!osmWay.geometry || osmWay.geometry.length === 0) {
     return null;
   }
@@ -254,10 +466,13 @@ export function osmWayToGarden(osmWay: OSMWay, mockData?: Partial<Garden>): Gard
   // Berechne Fläche aus OSM-Geometrie
   const calculatedSize = calculatePolygonArea(osmWay.geometry);
 
+  // Verwende umschließende Parzelle aus OSM, falls vorhanden, sonst Mock-Daten
+  const parcel = enclosingParcel || mockData?.parcel || '';
+
   return {
     id: `garden-${osmWay.id}`,
     number: osmWay.tags.name || '',
-    parcel: mockData?.parcel || '',
+    parcel: parcel,
     size: mockData?.size || 0, // Datenbank-Größe
     osmSize: calculatedSize, // OSM-Größe (immer setzen, auch wenn 0)
     availableFrom: mockData?.availableFrom || '',

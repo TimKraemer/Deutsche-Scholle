@@ -11,7 +11,7 @@ export interface Garden {
   valueReduction: number; // €
   hasElectricity: boolean;
   waterConnection: WaterConnectionType;
-  coordinates: [number, number]; // [lat, lng]
+  coordinates?: [number, number]; // [lat, lng] - optional, wird aus OSM berechnet
   bounds?: [[number, number], [number, number]]; // für Umrisse
   osmWayId?: number; // OSM Way ID für Plot 1050: 1412612288
 }
