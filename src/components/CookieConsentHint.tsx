@@ -23,20 +23,20 @@ export default function CookieConsentHint({ service, services, feature, onOpenCo
   };
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-[1000]">
+    <div className="absolute inset-0 flex items-center justify-center bg-scholle-bg-light z-[1000]">
       <div 
-        className="text-center p-6 bg-white rounded-lg shadow-lg max-w-md cursor-pointer hover:shadow-xl transition-shadow"
+        className="text-center p-6 bg-scholle-bg-container rounded-lg shadow-lg max-w-md cursor-pointer hover:shadow-xl transition-shadow border border-scholle-border"
         onClick={onOpenCookieConsent}
       >
-        <p className="text-gray-700 mb-2">
+        <p className="text-scholle-text mb-3 text-base">
           Um {feature} zu nutzen, benötigen wir Ihre Zustimmung für {getServicesText()}.
         </p>
         {requiredServices.length > 1 && (
-          <p className="text-sm text-gray-600 mb-2">
+          <p className="text-scholle-text-light mb-3 text-base">
             Die 3D-Luftbildansicht benötigt sowohl OpenStreetMap-Daten für die Gartenumrisse als auch Google Maps für die Satellitenbilder.
           </p>
         )}
-        <p className="text-sm text-blue-600 font-medium">
+        <p className="text-scholle-blue font-medium text-base hover:text-scholle-blue-dark transition-colors">
           Klicken Sie hier, um die Cookie-Einstellungen zu öffnen.
         </p>
       </div>

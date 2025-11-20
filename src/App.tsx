@@ -2,12 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import GardenSearch from './components/GardenSearch';
 import GardenMap from './components/GardenMap';
+import GardenList from './components/GardenList';
 import CookieConsent from './components/CookieConsent';
 import type { CookieConsentRef } from './components/CookieConsent';
 import CookieConsentContent from './components/CookieConsentContent';
 import { loadAllGardens, searchGardenByNumber } from './utils/osm';
 import type { OSMWay } from './utils/osm';
-import { findGardenByNumber } from './data/mockGardens';
+import { findGardenByNumber, mockGardens } from './data/mockGardens';
 
 interface CookiePreferences {
   googleMaps: boolean;
@@ -22,6 +23,7 @@ function App() {
     openStreetMap: false,
   });
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [hoveredGardenNumber, setHoveredGardenNumber] = useState<string | null>(null);
   const cookieConsentRef = useRef<CookieConsentRef>(null);
 
   // Lade initiale Cookie-Präferenzen beim Start
@@ -109,13 +111,13 @@ function App() {
   return (
     <>
       <CookieConsent ref={cookieConsentRef} onConsentChange={handleConsentChange} />
-      <div className="min-h-screen bg-gray-100 flex flex-col">
+      <div className="h-screen bg-scholle-bg flex flex-col overflow-hidden">
         <div className="container mx-auto px-4 py-8 flex-shrink-0">
           <header className="mb-8">
-            <h1 className="text-4xl font-bold text-gray-800 mb-2">
+            <h1 className="text-4xl font-bold text-scholle-text mb-2">
               Kleingartenverein Deutsche Scholle
             </h1>
-            <p className="text-gray-600">
+            <p className="text-scholle-text-light">
               Finden Sie freie Gärten auf der Karte
             </p>
           </header>
@@ -125,29 +127,48 @@ function App() {
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col min-h-0 px-4 pb-4">
-          <div className="flex-1 min-h-[350px] flex flex-col relative">
-            {/* Graue Box als Platzhalter für die Karte */}
-            <div className="absolute inset-0 bg-gray-200 rounded-lg border border-gray-300" />
-            
-            {cookiePreferences.openStreetMap ? (
-              <GardenMap 
-                selectedGarden={null} 
-                osmGeometry={undefined}
-                allGardens={allGardens}
+        <div className="flex-1 flex flex-col min-h-0 px-4 pb-4 overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0 overflow-hidden">
+            {/* Liste der freien Gärten */}
+            <div className="lg:col-span-1 flex flex-col min-h-0 overflow-hidden">
+              <GardenList 
+                gardens={mockGardens} 
                 onGardenClick={handleGardenClick}
-                cookiePreferences={cookiePreferences}
-                onOpenCookieConsent={() => cookieConsentRef.current?.open()}
+                hoveredGardenNumber={hoveredGardenNumber}
+                onGardenHover={setHoveredGardenNumber}
               />
-            ) : (
-              <div className="relative z-10 w-full h-full flex items-center justify-center p-8">
-                <div className="max-w-2xl w-full bg-white rounded-lg shadow-lg">
-                  <CookieConsentContent 
-                    onConsentChange={handleConsentChange}
+            </div>
+
+            {/* Karte */}
+            <div className="lg:col-span-2 flex flex-col min-h-0 overflow-hidden">
+              <div className="flex-1 min-h-[350px] flex flex-col relative">
+                {/* Graue Box als Platzhalter für die Karte */}
+                <div className="absolute inset-0 bg-scholle-border rounded-lg border border-scholle-border" />
+                
+                {cookiePreferences.openStreetMap ? (
+                  <GardenMap 
+                    selectedGarden={null} 
+                    osmGeometry={undefined}
+                    allGardens={allGardens}
+                    availableGardens={mockGardens.filter(g => g.availableFrom && g.availableFrom.trim() !== '')}
+                    hoveredGardenNumber={hoveredGardenNumber}
+                    onGardenHover={setHoveredGardenNumber}
+                    onGardenClick={handleGardenClick}
+                    cookiePreferences={cookiePreferences}
+                    onOpenCookieConsent={() => cookieConsentRef.current?.open()}
+                    disable3D={true}
                   />
-                </div>
+                ) : (
+                  <div className="relative z-10 w-full h-full flex items-center justify-center p-8">
+                    <div className="max-w-2xl w-full bg-scholle-bg-container rounded-lg shadow-lg border border-scholle-border">
+                      <CookieConsentContent 
+                        onConsentChange={handleConsentChange}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>

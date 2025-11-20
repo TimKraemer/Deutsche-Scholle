@@ -19,7 +19,40 @@ const DefaultIcon = L.icon({
   iconAnchor: [12, 41],
 });
 
+// Grüner Marker für freie Gärten
+const GreenIcon = L.icon({
+  iconUrl: icon,
+  shadowUrl: iconShadow,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  className: 'garden-marker-green',
+});
+
+// Hervorgehobener Marker (bei Hover)
+const HighlightedIcon = L.icon({
+  iconUrl: icon,
+  shadowUrl: iconShadow,
+  iconSize: [30, 49],
+  iconAnchor: [15, 49],
+  className: 'garden-marker-highlighted',
+});
+
 L.Marker.prototype.options.icon = DefaultIcon;
+
+// CSS für Marker-Farben
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style');
+  style.textContent = `
+    .garden-marker-green .leaflet-marker-icon {
+      filter: hue-rotate(90deg) saturate(1.5);
+    }
+    .garden-marker-highlighted .leaflet-marker-icon {
+      filter: hue-rotate(90deg) saturate(2) brightness(1.2);
+      z-index: 1000 !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 /**
  * Berechnet den optimalen Zoom-Level basierend auf den Bounds und der Karten-Größe
@@ -177,7 +210,7 @@ function GardenPolygon({ garden, isSelected, showLabels, onGardenClick, mapType 
           opacity={1}
         >
           <span 
-            className={`font-semibold cursor-pointer hover:underline ${isSelected ? 'text-green-700' : 'text-gray-700'}`}
+            className={`font-semibold cursor-pointer hover:underline ${isSelected ? 'text-scholle-green-dark' : 'text-scholle-text'}`}
             onClick={(e) => {
               e.stopPropagation();
               handleClick();
@@ -200,6 +233,9 @@ interface GardenMapProps {
   selectedGarden: Garden | null;
   osmGeometry?: Array<{ lat: number; lon: number }>;
   allGardens: OSMWay[];
+  availableGardens?: Garden[]; // Freie Gärten aus der Datenbank
+  hoveredGardenNumber?: string | null;
+  onGardenHover?: (gardenNumber: string | null) => void;
   onGardenClick: (gardenNumber: string) => void;
   defaultMapType?: 'osm' | '3d';
   cookiePreferences: CookiePreferences;
@@ -207,7 +243,7 @@ interface GardenMapProps {
   disable3D?: boolean;
 }
 
-export default function GardenMap({ selectedGarden, osmGeometry, allGardens, onGardenClick, defaultMapType = 'osm', cookiePreferences, onOpenCookieConsent, disable3D = false }: GardenMapProps) {
+export default function GardenMap({ selectedGarden, osmGeometry, allGardens, availableGardens = [], hoveredGardenNumber, onGardenHover, onGardenClick, defaultMapType = 'osm', cookiePreferences, onOpenCookieConsent, disable3D = false }: GardenMapProps) {
   // Initiale Koordinaten für "Deutsche Scholle Osnabrück"
   const initialCenter: [number, number] = [52.2568, 8.02725];
   const initialZoom = 15;
@@ -496,34 +532,32 @@ export default function GardenMap({ selectedGarden, osmGeometry, allGardens, onG
   }, [mapType, selectedGarden, osmGeometry, allGardens, onGardenClick, cookiePreferences.googleMaps, cookiePreferences.openStreetMap]);
 
   return (
-    <div ref={mapWrapperRef} className="w-full flex-1 min-h-[350px] flex flex-col rounded-lg overflow-hidden border border-gray-300 relative">
-      {/* Map Type Toggle - Immer sichtbar */}
-      <div className="absolute top-2 right-2 z-[1001] bg-white rounded-lg shadow-lg p-1 flex gap-1">
-        <button
-          onClick={() => setMapType('osm')}
-          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-            mapType === 'osm'
-              ? 'bg-green-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          Karte
-        </button>
-        <button
-          onClick={() => setMapType('3d')}
-          disabled={disable3D}
-          className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-            mapType === '3d'
-              ? 'bg-green-600 text-white'
-              : disable3D
-              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-          title={disable3D ? '3D-Ansicht nicht verfügbar, da kein Garten gefunden wurde' : undefined}
-        >
-          Luftbild (3D)
-        </button>
-      </div>
+    <div ref={mapWrapperRef} className="w-full flex-1 min-h-[350px] flex flex-col rounded-lg overflow-hidden border border-scholle-border relative">
+      {/* Map Type Toggle - Nur anzeigen wenn Umschalten möglich ist */}
+      {!disable3D && (
+        <div className="absolute top-2 right-2 z-[1001] bg-scholle-bg-container rounded-lg shadow-lg p-1 flex gap-1 border border-scholle-border">
+          <button
+            onClick={() => setMapType('osm')}
+            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+              mapType === 'osm'
+                ? 'bg-scholle-green text-white'
+                : 'bg-scholle-bg-light text-scholle-text hover:bg-scholle-border'
+            }`}
+          >
+            Karte
+          </button>
+          <button
+            onClick={() => setMapType('3d')}
+            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+              mapType === '3d'
+                ? 'bg-scholle-green text-white'
+                : 'bg-scholle-bg-light text-scholle-text hover:bg-scholle-border'
+            }`}
+          >
+            Luftbild (3D)
+          </button>
+        </div>
+      )}
 
       {/* Google Maps 3D Ansicht */}
       {mapType === '3d' ? (
@@ -623,6 +657,41 @@ export default function GardenMap({ selectedGarden, osmGeometry, allGardens, onG
         {selectedGarden && selectedGarden.coordinates && mapType === 'osm' && (
           <Marker position={selectedGarden.coordinates} />
         )}
+        
+        {/* Marker für freie Gärten, die in OSM gefunden wurden */}
+        {mapType === 'osm' && availableGardens.map((garden) => {
+          // Prüfe ob der Garten in OSM gefunden wurde
+          const osmGarden = allGardens.find(
+            osm => osm.id === garden.osmWayId || osm.tags.name === garden.number
+          );
+          
+          if (!osmGarden || !osmGarden.geometry || osmGarden.geometry.length === 0) {
+            return null;
+          }
+          
+          // Berechne Zentrum der Geometrie
+          const centerLat = osmGarden.geometry.reduce((sum, p) => sum + p.lat, 0) / osmGarden.geometry.length;
+          const centerLon = osmGarden.geometry.reduce((sum, p) => sum + p.lon, 0) / osmGarden.geometry.length;
+          
+          const isHovered = hoveredGardenNumber === garden.number;
+          
+          return (
+            <Marker
+              key={`available-${garden.id}`}
+              position={[centerLat, centerLon]}
+              icon={isHovered ? HighlightedIcon : GreenIcon}
+              eventHandlers={{
+                click: () => onGardenClick(garden.number),
+                mouseover: () => onGardenHover?.(garden.number),
+                mouseout: () => onGardenHover?.(null),
+              }}
+            >
+              <Tooltip permanent={false}>
+                Garten {garden.number}
+              </Tooltip>
+            </Marker>
+          );
+        })}
       </MapContainer>
       )}
     </div>

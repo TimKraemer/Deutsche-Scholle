@@ -33,15 +33,15 @@ export default function GardenSearch({ onSearch, isLoading = false, error = null
           value={gardenNumber}
           onChange={handleInputChange}
           placeholder="Garten-Nr. eingeben (z.B. 1050)"
-          className={`flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent ${
-            error ? 'border-red-300 bg-red-50' : 'border-gray-300'
+          className={`flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-scholle-green focus:border-transparent bg-scholle-bg-container ${
+            error ? 'border-red-300 bg-red-50' : 'border-scholle-border'
           }`}
           disabled={isLoading}
         />
         <button
           type="submit"
           disabled={isLoading || !gardenNumber.trim()}
-          className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          className="px-6 py-2 bg-scholle-green text-white rounded-lg hover:bg-scholle-green-dark disabled:bg-scholle-border disabled:cursor-not-allowed transition-colors"
         >
           {isLoading ? 'Suche...' : 'Suche'}
         </button>

@@ -92,11 +92,11 @@ export default function CookieConsentContent({
   return (
     <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
       <div className="p-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-4">
+        <h2 className="text-2xl font-bold text-scholle-text mb-4">
           Zugriff auf externe Server
         </h2>
         
-        <div className="mb-6 text-gray-700">
+        <div className="mb-6 text-scholle-text">
           <p>
             Um Ihnen die bestmögliche Erfahrung zu bieten, verwenden wir externe Kartendienste. 
             Bitte wählen Sie aus, welchen Diensten Sie den Zugriff auf externe Server erlauben möchten:
@@ -105,13 +105,13 @@ export default function CookieConsentContent({
 
         <div className="space-y-4 mb-6">
           {/* OpenStreetMap Option - ZUERST */}
-          <div className="border border-gray-200 rounded-lg p-4">
+          <div className="border border-scholle-border rounded-lg p-4">
             <div className="flex items-start justify-between mb-2">
               <div className="flex-1">
-                <h3 className="font-semibold text-gray-800 mb-1">
+                <h3 className="font-semibold text-scholle-text mb-1">
                   OpenStreetMap (Kartenansicht)
                 </h3>
-                <p className="text-sm text-gray-600 mb-2">
+                <p className="text-sm text-scholle-text-light mb-2">
                   Ermöglicht die Anzeige von Straßenkarten und Gartenumrissen. Daten werden an OpenStreetMap-Server übertragen.
                 </p>
               </div>
@@ -130,7 +130,7 @@ export default function CookieConsentContent({
                     }}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                  <div className="w-11 h-6 bg-scholle-border peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-scholle-green-light rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-scholle-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-scholle-green"></div>
                 </label>
               </div>
             </div>
@@ -139,25 +139,25 @@ export default function CookieConsentContent({
           {/* Google Maps Option - ABHÄNGIG VON OSM */}
           <div className={`border rounded-lg p-4 transition-colors ${
             openStreetMapConsent === true 
-              ? 'border-gray-200 bg-white' 
-              : 'border-gray-300 bg-gray-50'
+              ? 'border-scholle-border bg-scholle-bg-container' 
+              : 'border-scholle-border bg-scholle-bg-light'
           }`}>
             <div className="flex items-start justify-between mb-2">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   <h3 className={`font-semibold ${
-                    openStreetMapConsent === true ? 'text-gray-800' : 'text-gray-500'
+                    openStreetMapConsent === true ? 'text-scholle-text' : 'text-scholle-text-light'
                   }`}>
                     Google Maps (3D-Luftbild)
                   </h3>
                   {openStreetMapConsent !== true && (
-                    <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded">
+                    <span className="text-xs text-scholle-text-light bg-scholle-border px-2 py-0.5 rounded">
                       Benötigt OSM
                     </span>
                   )}
                 </div>
                 <p className={`text-sm mb-2 ${
-                  openStreetMapConsent === true ? 'text-gray-600' : 'text-gray-500'
+                  openStreetMapConsent === true ? 'text-scholle-text-light' : 'text-scholle-text-light'
                 }`}>
                   Ermöglicht die Anzeige von hochauflösenden Satellitenbildern und 3D-Geländedaten. 
                   Daten werden an Google-Server übertragen.
@@ -183,10 +183,10 @@ export default function CookieConsentContent({
                     }}
                     className="sr-only peer"
                   />
-                  <div className={`w-11 h-6 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${
+                  <div className={`w-11 h-6 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-scholle-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${
                     openStreetMapConsent === true
-                      ? 'bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 peer-checked:bg-green-600'
-                      : 'bg-gray-300'
+                      ? 'bg-scholle-border peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-scholle-green-light peer-checked:bg-scholle-green'
+                      : 'bg-scholle-border'
                   }`}></div>
                 </label>
               </div>
@@ -197,31 +197,31 @@ export default function CookieConsentContent({
         <div className="flex flex-col sm:flex-row gap-3">
           <button
             onClick={handleRejectAll}
-            className="flex-1 px-6 py-3 bg-gray-100 text-gray-800 rounded-lg font-medium hover:bg-gray-200 transition-colors border border-gray-300"
+            className="flex-1 px-6 py-3 bg-scholle-bg-light text-scholle-text rounded-lg font-medium hover:bg-scholle-border transition-colors border border-scholle-border"
           >
             Alle ablehnen
           </button>
           <button
             onClick={handleSave}
             disabled={googleMapsConsent === null || openStreetMapConsent === null}
-            className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed disabled:text-gray-500"
+            className="flex-1 px-6 py-3 bg-scholle-blue text-white rounded-lg font-medium hover:bg-scholle-blue-dark transition-colors disabled:bg-scholle-border disabled:cursor-not-allowed disabled:text-scholle-text-light"
           >
             Auswahl speichern
           </button>
           <button
             onClick={handleAcceptAll}
-            className="flex-1 px-6 py-3 bg-gray-100 text-gray-800 rounded-lg font-medium hover:bg-gray-200 transition-colors border border-gray-300"
+            className="flex-1 px-6 py-3 bg-scholle-bg-light text-scholle-text rounded-lg font-medium hover:bg-scholle-border transition-colors border border-scholle-border"
           >
             Alle akzeptieren
           </button>
         </div>
 
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <p className="text-xs text-gray-500 text-center">
+        <div className="mt-6 pt-6 border-t border-scholle-border">
+          <p className="text-xs text-scholle-text-light text-center">
             <span className="font-semibold">Hinweis:</span> Ihre Auswahl wird in Cookies gespeichert, damit Sie diese Seite erneut besuchen können, 
             ohne die Einstellungen erneut vornehmen zu müssen. Die Cookies werden für 365 Tage gespeichert.
           </p>
-          <p className="text-xs text-gray-500 mt-2 text-center">
+          <p className="text-xs text-scholle-text-light mt-2 text-center">
             Außer dieser Auswahl werden keinerlei Daten gespeichert. Es werden keine personenbezogenen Daten im Sinne der DSGVO gespeichert.
           </p>
         </div>

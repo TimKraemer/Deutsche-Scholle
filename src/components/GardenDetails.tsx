@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import type { Garden } from '../types/garden';
+import GardenChecklist from './GardenChecklist';
 
 interface GardenDetailsProps {
   garden: Garden | null;
@@ -10,7 +10,6 @@ interface GardenDetailsProps {
 }
 
 export default function GardenDetails({ garden, gardenNumber, osmParcel, osmSize }: GardenDetailsProps) {
-  const [hoveredIcon, setHoveredIcon] = useState<string | null>(null);
 
   // Prüfe ob Garten existiert aber keine Details vorliegen (keine Datenbankdaten)
   // Ein Garten hat keine Details, wenn gardenNumber existiert, aber garden null ist
@@ -19,8 +18,8 @@ export default function GardenDetails({ garden, gardenNumber, osmParcel, osmSize
 
   if (!garden && !hasNoDetails) {
     return (
-      <div className="w-full p-6 bg-gray-50 rounded-lg border border-gray-200">
-        <p className="text-gray-500 text-center">
+      <div className="w-full p-6 bg-scholle-bg-light rounded-lg border border-scholle-border">
+        <p className="text-scholle-text-light text-center">
           Kein Garten ausgewählt. Geben Sie eine Garten-Nummer ein und suchen Sie.
         </p>
       </div>
@@ -35,47 +34,47 @@ export default function GardenDetails({ garden, gardenNumber, osmParcel, osmSize
     const displaySize = garden?.osmSize || osmSize || garden?.size || null;
 
     return (
-      <div className="w-full bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col h-full overflow-visible">
+      <div className="w-full bg-scholle-bg-container rounded-lg border border-scholle-border shadow-sm flex flex-col h-full overflow-visible">
         <div className="p-6 space-y-4 overflow-y-auto flex-1 overflow-x-visible">
-          <h2 className="text-2xl font-bold mb-4 text-gray-800">Gartendetails</h2>
+          <h2 className="text-2xl font-bold mb-4 text-scholle-text border-b border-scholle-border pb-2">Gartendetails</h2>
           
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">
+                <label className="block text-sm font-semibold text-scholle-text-light mb-1 uppercase tracking-wide">
                   Garten-Nr.
                 </label>
-                <p className="text-lg font-semibold text-gray-900">{displayNumber}</p>
+                <p className="text-lg font-semibold text-scholle-text">{displayNumber}</p>
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">
+                <label className="block text-sm font-semibold text-scholle-text-light mb-1 uppercase tracking-wide">
                   Parzelle
                 </label>
-                <p className="text-lg text-gray-900">{displayParcel}</p>
+                <p className="text-lg text-scholle-text">{displayParcel}</p>
               </div>
             </div>
 
             {displaySize !== null && (
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">
+                <label className="block text-sm font-semibold text-scholle-text-light mb-1 uppercase tracking-wide">
                   Größe
                 </label>
                 <div className="space-y-1">
                   {garden?.osmSize !== undefined && garden?.osmSize !== null ? (
                     <>
                       {garden.size > 0 && (
-                        <p className="text-lg text-gray-900">
-                          {garden.size} m² <span className="text-sm text-gray-500">(Datenbank)</span>
+                        <p className="text-lg text-scholle-text">
+                          {garden.size} m² <span className="text-sm text-scholle-text-light">(Datenbank)</span>
                         </p>
                       )}
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-scholle-text-light">
                         {garden.osmSize} m² <span className="text-xs">(OSM berechnet)</span>
                       </p>
                     </>
                   ) : (
-                    <p className="text-lg text-gray-900">
-                      {displaySize} m² {osmSize ? <span className="text-sm text-gray-500">(OSM berechnet)</span> : ''}
+                    <p className="text-lg text-scholle-text">
+                      {displaySize} m² {osmSize ? <span className="text-sm text-scholle-text-light">(OSM berechnet)</span> : ''}
                     </p>
                   )}
                 </div>
@@ -109,8 +108,16 @@ export default function GardenDetails({ garden, gardenNumber, osmParcel, osmSize
 
   const formatDate = (dateString: string) => {
     if (!dateString) return '-';
+    // Wenn "sofort" oder ähnliche Werte, direkt zurückgeben
+    if (dateString.toLowerCase() === 'sofort' || dateString.toLowerCase() === 'ab sofort') {
+      return 'Sofort';
+    }
     try {
       const date = new Date(dateString);
+      // Prüfe ob das Datum gültig ist
+      if (isNaN(date.getTime())) {
+        return dateString;
+      }
       return date.toLocaleDateString('de-DE');
     } catch {
       return dateString;
@@ -144,7 +151,7 @@ export default function GardenDetails({ garden, gardenNumber, osmParcel, osmSize
       case 'brunnen':
         return (
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
           </svg>
         );
       case 'wasserleitung':
@@ -156,7 +163,8 @@ export default function GardenDetails({ garden, gardenNumber, osmParcel, osmSize
       case 'brunnen-aussen':
         return (
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19v-4" />
           </svg>
         );
       case 'kein':
@@ -190,37 +198,37 @@ export default function GardenDetails({ garden, gardenNumber, osmParcel, osmSize
   };
 
   return (
-    <div className="w-full bg-white rounded-lg border border-gray-200 shadow-sm flex flex-col h-full overflow-visible">
-      <div className="p-6 space-y-4 overflow-y-auto flex-1 overflow-x-visible">
-          <h2 className="text-2xl font-bold mb-4 text-gray-800">Gartendetails</h2>
+    <div className="w-full bg-scholle-bg-container rounded-lg border border-scholle-border shadow-sm flex flex-col h-full min-h-0 overflow-hidden">
+      <div className="p-6 overflow-y-auto flex-1 min-h-0 overflow-x-visible">
+          <h2 className="text-2xl font-bold mb-4 text-scholle-text border-b border-scholle-border pb-2">Gartendetails</h2>
           
           <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">
+            <label className="block text-sm font-semibold text-scholle-text-light mb-1 uppercase tracking-wide">
               Garten-Nr.
             </label>
-            <p className="text-lg font-semibold text-gray-900">{garden.number}</p>
+            <p className="text-lg font-semibold text-scholle-text">{garden.number}</p>
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">
+            <label className="block text-sm font-semibold text-scholle-text-light mb-1 uppercase tracking-wide">
               Parzelle
             </label>
-            <p className="text-lg text-gray-900">{garden.parcel || '-'}</p>
+            <p className="text-lg text-scholle-text">{garden.parcel || '-'}</p>
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-600 mb-1">
+          <label className="block text-sm font-semibold text-scholle-text-light mb-1 uppercase tracking-wide">
             Größe
           </label>
           <div className="space-y-1">
-            <p className="text-lg text-gray-900">
-              {garden.size} m² <span className="text-sm text-gray-500">(Datenbank)</span>
+            <p className="text-lg text-scholle-text">
+              {garden.size} m² <span className="text-sm text-scholle-text-light">(Datenbank)</span>
             </p>
             {garden.osmSize !== undefined && garden.osmSize !== null && (
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-scholle-text-light">
                 {garden.osmSize} m² <span className="text-xs">(OSM berechnet)</span>
               </p>
             )}
@@ -228,80 +236,70 @@ export default function GardenDetails({ garden, gardenNumber, osmParcel, osmSize
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-600 mb-1">
+          <label className="block text-sm font-semibold text-scholle-text-light mb-1 uppercase tracking-wide">
             Frei ab
           </label>
-          <p className="text-lg text-gray-900">{formatDate(garden.availableFrom)}</p>
+          <p className="text-lg text-scholle-text">{formatDate(garden.availableFrom)}</p>
         </div>
 
-        <div className="pt-4 border-t border-gray-200">
-          <label className="block text-sm font-medium text-gray-600 mb-2">
-            Ausstattung
-          </label>
-          <div className="flex gap-4">
-            {/* Stromanschluss */}
-            <div className="relative z-[10000]">
-              <button
-                className={`w-10 h-10 flex items-center justify-center transition-transform hover:scale-110 cursor-pointer rounded-lg text-gray-700 hover:bg-gray-100 ${
-                  !garden.hasElectricity ? 'opacity-40' : ''
-                }`}
-                onMouseEnter={() => setHoveredIcon('electricity')}
-                onMouseLeave={() => setHoveredIcon(null)}
-                onClick={() => setHoveredIcon(hoveredIcon === 'electricity' ? null : 'electricity')}
-                aria-label="Stromanschluss"
-              >
-                {getElectricityIcon(garden.hasElectricity)}
-              </button>
-              {hoveredIcon === 'electricity' && (
-                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg whitespace-nowrap pointer-events-none z-[10001]">
-                  {garden.hasElectricity ? 'Stromanschluss vorhanden' : 'Kein Stromanschluss'}
-                  <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+        {/* Ausstattung nur anzeigen, wenn mindestens eine bekannte Ausstattung vorhanden ist */}
+        {(garden.hasElectricity === true || (garden.waterConnection !== undefined && garden.waterConnection !== 'kein')) && (
+          <div className="pt-4 border-t border-scholle-border">
+            <label className="block text-sm font-semibold text-scholle-text-light mb-3 uppercase tracking-wide">
+              Ausstattung
+            </label>
+            <div className="space-y-3">
+              {/* Stromanschluss - nur anzeigen wenn bekannt und vorhanden */}
+              {garden.hasElectricity === true && (
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0">
+                    {getElectricityIcon(true)}
+                  </div>
+                  <span className="text-sm text-scholle-text">
+                    Stromanschluss vorhanden
+                  </span>
                 </div>
               )}
-            </div>
 
-            {/* Wasseranschluss */}
-            <div className="relative z-[10000] overflow-visible">
-              <button
-                className={`w-10 h-10 flex items-center justify-center transition-transform hover:scale-110 cursor-pointer rounded-lg text-gray-700 hover:bg-gray-100 ${
-                  garden.waterConnection === 'kein' ? 'opacity-40' : ''
-                }`}
-                onMouseEnter={() => setHoveredIcon('water')}
-                onMouseLeave={() => setHoveredIcon(null)}
-                onClick={() => setHoveredIcon(hoveredIcon === 'water' ? null : 'water')}
-                aria-label="Wasseranschluss"
-              >
-                {getWaterIcon(garden.waterConnection)}
-              </button>
-              {hoveredIcon === 'water' && (
-                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg whitespace-nowrap pointer-events-none z-[10001]">
-                  {getWaterConnectionLabel(garden.waterConnection)}
-                  <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+              {/* Wasseranschluss - nur anzeigen wenn bekannt und vorhanden */}
+              {garden.waterConnection !== undefined && garden.waterConnection !== 'kein' && (
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0">
+                    {getWaterIcon(garden.waterConnection)}
+                  </div>
+                  <span className="text-sm text-scholle-text">
+                    {getWaterConnectionLabel(garden.waterConnection)}
+                  </span>
                 </div>
               )}
             </div>
           </div>
-        </div>
+        )}
 
-        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">
-              Wertermittlung
-            </label>
-            <p className="text-lg font-semibold text-gray-900">
-              {formatCurrency(garden.valuation)}
-            </p>
+        {(garden.valuation > 0 || garden.valueReduction > 0) && (
+          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-scholle-border">
+            <div>
+              <label className="block text-sm font-semibold text-scholle-text-light mb-1 uppercase tracking-wide">
+                Wertermittlung
+              </label>
+              <p className="text-lg font-semibold text-scholle-text">
+                {formatCurrency(garden.valuation)}
+              </p>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-semibold text-scholle-text-light mb-1 uppercase tracking-wide">
+                Wertminderung
+              </label>
+              <p className="text-lg font-semibold text-red-600">
+                {formatCurrency(garden.valueReduction)}
+              </p>
+            </div>
           </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">
-              Wertminderung
-            </label>
-            <p className="text-lg font-semibold text-red-600">
-              {formatCurrency(garden.valueReduction)}
-            </p>
-          </div>
-        </div>
+        )}
+
+        {/* Checkliste für freie Gärten */}
+        <GardenChecklist garden={garden} />
       </div>
       </div>
     </div>

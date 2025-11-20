@@ -478,8 +478,8 @@ export function osmWayToGarden(osmWay: OSMWay, mockData?: Partial<Garden>, enclo
     availableFrom: mockData?.availableFrom || '',
     valuation: mockData?.valuation || 0,
     valueReduction: mockData?.valueReduction || 0,
-    hasElectricity: mockData?.hasElectricity ?? false,
-    waterConnection: mockData?.waterConnection || 'kein',
+    hasElectricity: mockData?.hasElectricity, // Optional: nur wenn bekannt
+    waterConnection: mockData?.waterConnection, // Optional: nur wenn bekannt
     coordinates: [centerLat, centerLon] as [number, number],
     bounds: [[minLat, minLon], [maxLat, maxLon]] as [[number, number], [number, number]],
     osmWayId: osmWay.id,
