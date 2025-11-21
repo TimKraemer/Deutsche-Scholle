@@ -6,7 +6,7 @@ import GardenList from './components/GardenList';
 import CookieConsent from './components/CookieConsent';
 import type { CookieConsentRef } from './components/CookieConsent';
 import CookieConsentContent from './components/CookieConsentContent';
-import { loadAllGardens, searchGardenByNumber } from './utils/osm';
+import { loadAllGardens, loadAllGardensWithUpdate, searchGardenByNumber, searchGardenByNumberWithUpdate } from './utils/osm';
 import type { OSMWay } from './utils/osm';
 import { findGardenByNumber, mockGardens } from './data/mockGardens';
 
@@ -61,16 +61,26 @@ function App() {
       return;
     }
 
-    const fetchAllGardens = async () => {
-      try {
-        const gardens = await loadAllGardens();
-        setAllGardens(gardens);
-      } catch (err) {
-        console.error('Error loading all gardens:', err);
-      }
-    };
+    // Hybrid-Ansatz: Zeige sofort gecachte Daten, aktualisiere im Hintergrund
+    // Verwende forceRefresh=false für Background-Update, damit neue Gärten gefunden werden
+    const cachedGardens = loadAllGardensWithUpdate((updatedGardens) => {
+      // Callback wird aufgerufen wenn neue Daten verfügbar sind
+      setAllGardens(updatedGardens);
+    });
     
-    fetchAllGardens();
+    // Setze sofort gecachte Daten (falls vorhanden)
+    if (cachedGardens.length > 0) {
+      setAllGardens(cachedGardens);
+    } else {
+      // Wenn kein Cache vorhanden, lade sofort (ohne Cache)
+      loadAllGardens(false).then((gardens: OSMWay[]) => {
+        if (gardens.length > 0) {
+          setAllGardens(gardens);
+        }
+      }).catch((err: any) => {
+        console.error('Error loading all gardens:', err);
+      });
+    }
   }, [cookiePreferences.openStreetMap]);
 
   const handleSearch = async (gardenNumber: string) => {
@@ -87,8 +97,25 @@ function App() {
     
     // Wenn nicht in Datenbank, prüfe in OSM (nur wenn Zustimmung gegeben)
     if (cookiePreferences.openStreetMap) {
+      // Hybrid-Ansatz: Zeige sofort gecachte Daten, aktualisiere im Hintergrund
+      const cachedOsmWay = searchGardenByNumberWithUpdate(gardenNumber, (updatedWay) => {
+        // Callback wird aufgerufen wenn neue Daten verfügbar sind
+        // Navigiere nur wenn noch auf der Startseite
+        if (updatedWay && window.location.pathname === '/') {
+          navigate(`/${gardenNumber}`);
+        }
+      });
+      
+      if (cachedOsmWay) {
+        // Garten in OSM Cache gefunden, navigiere zur Detailseite
+        navigate(`/${gardenNumber}`);
+        return;
+      }
+      
+      // Wenn kein Cache vorhanden, warte auf OSM-Request
       try {
-        const osmWay = await searchGardenByNumber(gardenNumber);
+        // Versuche mit forceRefresh um sicherzustellen, dass wir die neuesten Daten bekommen
+        const osmWay = await searchGardenByNumber(gardenNumber, true);
         if (osmWay) {
           // Garten in OSM gefunden, navigiere zur Detailseite
           navigate(`/${gardenNumber}`);

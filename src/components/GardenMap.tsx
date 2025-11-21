@@ -19,40 +19,36 @@ const DefaultIcon = L.icon({
   iconAnchor: [12, 41],
 });
 
-// Grüner Marker für freie Gärten
-const GreenIcon = L.icon({
-  iconUrl: icon,
-  shadowUrl: iconShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  className: 'garden-marker-green',
-});
+// SVG-Icon für grüne Marker (Theme-Grün #6B8F2D) mit Kontur und weißem Punkt
+// Basierend auf dem originalen Leaflet Marker Design
+const createGreenMarkerIcon = (size: number = 25) => {
+  const width = size;
+  const height = size * 1.64; // Standard Leaflet Marker Proportionen
+  const svg = `
+    <svg width="${width}" height="${height}" viewBox="0 0 25 41" xmlns="http://www.w3.org/2000/svg">
+      <!-- Schatten -->
+      <path fill="#000000" fill-opacity="0.3" d="M12.5 40.5c-1.5 0-2.5-1-2.5-2.5v-2.5c0-1.5 1-2.5 2.5-2.5s2.5 1 2.5 2.5v2.5c0 1.5-1 2.5-2.5 2.5z"/>
+      <!-- Marker Form (Tropfenform) -->
+      <path fill="#6B8F2D" stroke="#5A7A25" stroke-width="1.5" d="M12.5 0C5.6 0 0 5.6 0 12.5c0 8.5 12.5 28.5 12.5 28.5S25 21 25 12.5C25 5.6 19.4 0 12.5 0z"/>
+      <!-- Weißer Punkt in der Mitte -->
+      <circle cx="12.5" cy="12.5" r="4.5" fill="#FFFFFF" stroke="#5A7A25" stroke-width="0.8"/>
+    </svg>
+  `;
+  return L.divIcon({
+    className: 'custom-green-marker',
+    html: svg,
+    iconSize: [width, height],
+    iconAnchor: [width / 2, height],
+  });
+};
 
-// Hervorgehobener Marker (bei Hover)
-const HighlightedIcon = L.icon({
-  iconUrl: icon,
-  shadowUrl: iconShadow,
-  iconSize: [30, 49],
-  iconAnchor: [15, 49],
-  className: 'garden-marker-highlighted',
-});
+// Grüner Marker für freie Gärten
+const GreenIcon = createGreenMarkerIcon(25);
+
+// Hervorgehobener Marker (bei Hover) - etwas größer
+const HighlightedIcon = createGreenMarkerIcon(30);
 
 L.Marker.prototype.options.icon = DefaultIcon;
-
-// CSS für Marker-Farben
-if (typeof document !== 'undefined') {
-  const style = document.createElement('style');
-  style.textContent = `
-    .garden-marker-green .leaflet-marker-icon {
-      filter: hue-rotate(90deg) saturate(1.5);
-    }
-    .garden-marker-highlighted .leaflet-marker-icon {
-      filter: hue-rotate(90deg) saturate(2) brightness(1.2);
-      z-index: 1000 !important;
-    }
-  `;
-  document.head.appendChild(style);
-}
 
 /**
  * Berechnet den optimalen Zoom-Level basierend auf den Bounds und der Karten-Größe
@@ -171,13 +167,17 @@ interface GardenPolygonProps {
   showLabels: boolean;
   onGardenClick: (gardenNumber: string) => void;
   mapType: 'osm' | 'satellite';
+  isAvailable?: boolean; // Ist der Garten ein freier Garten?
+  hoveredGardenNumber?: string | null;
+  onGardenHover?: (gardenNumber: string | null) => void;
 }
 
-function GardenPolygon({ garden, isSelected, showLabels, onGardenClick, mapType }: GardenPolygonProps) {
+function GardenPolygon({ garden, isSelected, showLabels, onGardenClick, mapType, isAvailable = false, hoveredGardenNumber, onGardenHover }: GardenPolygonProps) {
   if (!garden.geometry || garden.geometry.length === 0) return null;
 
   const coords = osmGeometryToLeafletCoords(garden.geometry);
   const gardenNumber = garden.tags.name || '';
+  const isHovered = hoveredGardenNumber === gardenNumber;
 
   const handleClick = () => {
     if (gardenNumber) {
@@ -200,21 +200,33 @@ function GardenPolygon({ garden, isSelected, showLabels, onGardenClick, mapType 
       }}
       eventHandlers={{
         click: handleClick,
+        mouseover: () => onGardenHover?.(gardenNumber),
+        mouseout: () => onGardenHover?.(null),
       }}
     >
       {gardenNumber && showLabels && (
         <Tooltip
           permanent
           direction="center"
-          className="garden-label-tooltip garden-label-clickable"
+          className={`garden-label-tooltip garden-label-clickable ${isAvailable ? 'garden-label-available' : ''}`}
           opacity={1}
         >
           <span 
-            className={`font-semibold cursor-pointer hover:underline ${isSelected ? 'text-scholle-green-dark' : 'text-scholle-text'}`}
+            className={`font-semibold cursor-pointer transition-all ${
+              isAvailable 
+                ? isHovered 
+                  ? 'text-white bg-scholle-green-dark text-lg px-2 py-1 rounded' 
+                  : 'text-white bg-scholle-green hover:bg-scholle-green-dark hover:text-lg px-2 py-1 rounded'
+                : isSelected 
+                  ? 'text-scholle-green-dark' 
+                  : 'text-scholle-text hover:text-scholle-green'
+            }`}
             onClick={(e) => {
               e.stopPropagation();
               handleClick();
             }}
+            onMouseEnter={() => onGardenHover?.(gardenNumber)}
+            onMouseLeave={() => onGardenHover?.(null)}
           >
             {gardenNumber}
           </span>
@@ -640,7 +652,9 @@ export default function GardenMap({ selectedGarden, osmGeometry, allGardens, ava
         
         {/* Zeige alle Gärten an */}
         {allGardens.map((garden) => {
-          const isSelected = selectedGarden?.osmWayId === garden.id;
+          const isSelected = !!(selectedGarden && selectedGarden.number === garden.tags.name);
+          // Prüfe ob der Garten ein freier Garten ist
+          const isAvailable = availableGardens.some(g => g.number === garden.tags.name);
           return (
             <GardenPolygon
               key={garden.id}
@@ -649,22 +663,65 @@ export default function GardenMap({ selectedGarden, osmGeometry, allGardens, ava
               showLabels={showLabels}
               onGardenClick={onGardenClick}
               mapType={mapType}
+              isAvailable={isAvailable}
+              hoveredGardenNumber={hoveredGardenNumber}
+              onGardenHover={onGardenHover}
             />
           );
         })}
+        
+        {/* Zeige ausgewählten Garten als Polygon wenn osmGeometry vorhanden ist (auch wenn nicht in allGardens) */}
+        {selectedGarden && osmGeometry && osmGeometry.length > 0 && (() => {
+          const gardenNumber = selectedGarden.number;
+          const isSatellite = mapType === 'satellite';
+          return (
+            <Polygon
+              positions={osmGeometryToLeafletCoords(osmGeometry)}
+              pathOptions={{
+                color: '#22c55e',
+                fillColor: '#22c55e',
+                fillOpacity: isSatellite ? 0 : 0.3,
+                weight: 2,
+              }}
+              eventHandlers={{
+                click: () => onGardenClick(gardenNumber),
+              }}
+            >
+              {showLabels && (
+                <Tooltip
+                  permanent
+                  direction="center"
+                  className="garden-label-tooltip garden-label-clickable"
+                  opacity={1}
+                >
+                  <span 
+                    className="font-semibold cursor-pointer hover:underline text-scholle-green-dark"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onGardenClick(gardenNumber);
+                    }}
+                  >
+                    {gardenNumber}
+                  </span>
+                </Tooltip>
+              )}
+            </Polygon>
+          );
+        })()}
         
         {/* Marker nur in Kartenansicht, nicht in Satellitenansicht */}
         {selectedGarden && selectedGarden.coordinates && mapType === 'osm' && (
           <Marker position={selectedGarden.coordinates} />
         )}
         
-        {/* Marker für freie Gärten, die in OSM gefunden wurden */}
-        {mapType === 'osm' && availableGardens.map((garden) => {
-          // Prüfe ob der Garten in OSM gefunden wurde
+        {/* Marker für freie Gärten - nur wenn in OSM gefunden und Labels NICHT sichtbar */}
+        {mapType === 'osm' && !showLabels && availableGardens.map((garden) => {
+          // Prüfe ob der Garten in OSM gefunden wurde (nur nach Name suchen)
           const osmGarden = allGardens.find(
-            osm => osm.id === garden.osmWayId || osm.tags.name === garden.number
+            osm => osm.tags.name === garden.number
           );
           
+          // Nur anzeigen wenn in OSM gefunden und Geometrie vorhanden
           if (!osmGarden || !osmGarden.geometry || osmGarden.geometry.length === 0) {
             return null;
           }

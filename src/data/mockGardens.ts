@@ -2,7 +2,6 @@ import type { Garden } from '../types/garden';
 
 /**
  * Mock-Daten für Gärten
- * Plot 1050 (OSM Way ID: 1412612288) als Beispiel
  */
 export const mockGardens: Garden[] = [
   {
@@ -15,7 +14,6 @@ export const mockGardens: Garden[] = [
     valueReduction: 45, // €
     hasElectricity: true,
     waterConnection: 'brunnen',
-    osmWayId: 1412612288,
   },
   {
     id: 'garden-1027',
@@ -27,7 +25,6 @@ export const mockGardens: Garden[] = [
     valueReduction: 292,
     hasElectricity: false,
     waterConnection: 'kein',
-    coordinates: [52.258, 8.021],
   },
   {
     id: 'garden-249',
@@ -39,7 +36,6 @@ export const mockGardens: Garden[] = [
     valueReduction: 300,
     hasElectricity: false,
     waterConnection: 'kein',
-    coordinates: [52.258, 8.021],
   },
   {
     id: 'garden-272',
@@ -51,7 +47,6 @@ export const mockGardens: Garden[] = [
     valueReduction: 1525,
     hasElectricity: false,
     waterConnection: 'kein',
-    coordinates: [52.258, 8.021],
   },
   {
     id: 'garden-274',
@@ -63,7 +58,6 @@ export const mockGardens: Garden[] = [
     valueReduction: 75,
     hasElectricity: false,
     waterConnection: 'kein',
-    coordinates: [52.258, 8.021],
   },
   {
     id: 'garden-278',
@@ -75,7 +69,6 @@ export const mockGardens: Garden[] = [
     valueReduction: 1521,
     hasElectricity: false,
     waterConnection: 'kein',
-    coordinates: [52.258, 8.021],
   },
   {
     id: 'garden-293',
@@ -87,7 +80,6 @@ export const mockGardens: Garden[] = [
     valueReduction: 340,
     hasElectricity: false,
     waterConnection: 'kein',
-    coordinates: [52.258, 8.021],
   },
   {
     id: 'garden-427',
@@ -99,7 +91,6 @@ export const mockGardens: Garden[] = [
     valueReduction: 255,
     hasElectricity: false,
     waterConnection: 'kein',
-    coordinates: [52.258, 8.021],
   },
   {
     id: 'garden-450',
@@ -111,7 +102,6 @@ export const mockGardens: Garden[] = [
     valueReduction: 1055,
     hasElectricity: false,
     waterConnection: 'kein',
-    coordinates: [52.258, 8.021],
   },
   {
     id: 'garden-491',
@@ -123,7 +113,6 @@ export const mockGardens: Garden[] = [
     valueReduction: 936,
     hasElectricity: false,
     waterConnection: 'kein',
-    coordinates: [52.258, 8.021],
   },
   {
     id: 'garden-496',
@@ -135,7 +124,6 @@ export const mockGardens: Garden[] = [
     valueReduction: 630,
     hasElectricity: false,
     waterConnection: 'kein',
-    coordinates: [52.258, 8.021],
   },
   {
     id: 'garden-531',
@@ -147,7 +135,6 @@ export const mockGardens: Garden[] = [
     valueReduction: 135,
     hasElectricity: false,
     waterConnection: 'kein',
-    coordinates: [52.258, 8.021],
   },
 ];
 

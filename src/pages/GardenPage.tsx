@@ -6,7 +6,7 @@ import CookieConsent from '../components/CookieConsent';
 import type { CookieConsentRef } from '../components/CookieConsent';
 import type { Garden } from '../types/garden';
 import { findGardenByNumber } from '../data/mockGardens';
-import { searchGardenByNumber, osmWayToGarden, loadAllGardens, loadGardenByWayId, findEnclosingParcel } from '../utils/osm';
+import { searchGardenByNumber, osmWayToGarden, loadAllGardensWithUpdate, findEnclosingParcel } from '../utils/osm';
 import type { OSMWay } from '../utils/osm';
 
 interface CookiePreferences {
@@ -60,23 +60,23 @@ export default function GardenPage() {
     });
   };
 
-  // Lade alle Gärten nur wenn OSM-Zustimmung gegeben wurde
-  useEffect(() => {
-    if (!cookiePreferences.openStreetMap) {
-      return;
-    }
-
-    const fetchAllGardens = async () => {
-      try {
-        const gardens = await loadAllGardens();
-        setAllGardens(gardens);
-      } catch (err) {
-        console.error('Error loading all gardens:', err);
+    // Lade alle Gärten nur wenn OSM-Zustimmung gegeben wurde
+    useEffect(() => {
+      if (!cookiePreferences.openStreetMap) {
+        return;
       }
-    };
-    
-    fetchAllGardens();
-  }, [cookiePreferences.openStreetMap]);
+
+      // Hybrid-Ansatz: Zeige sofort gecachte Daten, aktualisiere im Hintergrund
+      const cachedGardens = loadAllGardensWithUpdate((updatedGardens) => {
+        // Callback wird aufgerufen wenn neue Daten verfügbar sind
+        setAllGardens(updatedGardens);
+      });
+      
+      // Setze sofort gecachte Daten (falls vorhanden)
+      if (cachedGardens.length > 0) {
+        setAllGardens(cachedGardens);
+      }
+    }, [cookiePreferences.openStreetMap]);
 
   // Lade Garten basierend auf URL-Parameter
   useEffect(() => {
@@ -122,41 +122,10 @@ export default function GardenPage() {
             setError('Garten gefunden, aber Geometrie konnte nicht verarbeitet werden.');
           }
         } else if (mockGarden) {
-          // Fallback: Versuche über Way ID zu laden, wenn vorhanden (nur wenn Zustimmung gegeben)
-          if (mockGarden.osmWayId && cookiePreferences.openStreetMap) {
-            const osmWayById = await loadGardenByWayId(mockGarden.osmWayId);
-            
-            if (osmWayById) {
-              // Suche nach umschließender Parzelle
-              const enclosingParcel = await findEnclosingParcel(osmWayById);
-              setOsmParcel(enclosingParcel);
-              
-              // OSM-Größe wird später aus dem Garden-Objekt extrahiert
-              
-              const garden = osmWayToGarden(osmWayById, mockGarden, enclosingParcel);
-              if (garden) {
-                setSelectedGarden(garden);
-                setOsmSize(garden.osmSize);
-                if (osmWayById.geometry) {
-                  setOsmGeometry(osmWayById.geometry);
-                  setHasOsmData(true);
-                }
-              } else {
-                setSelectedGarden(mockGarden);
-                setError('Garten gefunden, aber Geometrie konnte nicht verarbeitet werden.');
-              }
-            } else {
-              // Garten in DB, aber nicht in OSM gefunden
-              setSelectedGarden(mockGarden);
-              setHasOsmData(false);
-              // Kein Fehler setzen - Hinweis wird in der Karten-Box angezeigt
-            }
-          } else {
-            // Garten in DB, aber keine OSM-Zustimmung oder kein osmWayId
-            setSelectedGarden(mockGarden);
-            setHasOsmData(false);
-            // Kein Fehler setzen - Hinweis wird in der Karten-Box angezeigt oder CookieConsentHint
-          }
+          // Garten in DB, aber nicht in OSM gefunden
+          setSelectedGarden(mockGarden);
+          setHasOsmData(false);
+          // Kein Fehler setzen - Hinweis wird in der Karten-Box angezeigt
         } else {
           // Garten weder in Mock-Daten noch in OSM gefunden
           // Aber wenn OSM-Zustimmung nicht gegeben ist, könnte der Garten trotzdem existieren

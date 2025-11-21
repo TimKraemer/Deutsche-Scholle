@@ -1,7 +1,35 @@
 import type { Garden } from '../types/garden';
-import { getFromCache, setCache, CacheKeys } from './cache';
+import { getFromCache, setCache, CacheKeys, clearCache as clearOSMCache } from './cache';
 
-const OVERPASS_API_URL = 'https://overpass-api.de/api/interpreter';
+/**
+ * Leert den gesamten OSM-Cache
+ * Nützlich wenn neue Daten in OSM hinzugefügt wurden und sofort sichtbar sein sollen
+ */
+export function clearCache(): void {
+  clearOSMCache();
+}
+
+/**
+ * Leert den Cache für einen spezifischen Garten
+ * @param gardenNumber Die Gartennummer
+ */
+export function clearGardenCache(gardenNumber: string): void {
+  const cacheKey = CacheKeys.GARDEN(gardenNumber);
+  try {
+    localStorage.removeItem(`osm_cache_${cacheKey}`);
+  } catch (error) {
+    console.error('Error clearing garden cache:', error);
+  }
+}
+
+// Liste von Overpass API Servern als Fallback
+const OVERPASS_API_SERVERS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.openstreetmap.ru/api/interpreter',
+  'https://overpass-api.openstreetmap.fr/api/interpreter',
+];
+
 
 export interface OSMWay {
   type: 'way';
@@ -18,13 +46,92 @@ export interface OSMResponse {
 }
 
 /**
+ * Führt einen Overpass API Request mit Retry-Logik und Fallback-Servern aus
+ * @param query Die Overpass Query
+ * @param maxRetries Maximale Anzahl von Retries pro Server
+ * @param retryDelay Initiale Verzögerung zwischen Retries in ms
+ */
+async function fetchOverpassAPI(
+  query: string,
+  maxRetries: number = 3,
+  retryDelay: number = 1000
+): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  // Versuche jeden Server
+  for (const serverUrl of OVERPASS_API_SERVERS) {
+    // Retry-Logik für jeden Server
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const controller = new AbortController();
+        // Längere Timeouts für komplexere Queries
+        const timeout = attempt === 0 ? 30000 : 45000; // 30s bzw. 45s
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+        
+        const response = await fetch(serverUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: `data=${encodeURIComponent(query)}`,
+          signal: controller.signal,
+        });
+        
+        clearTimeout(timeoutId);
+        
+        // Wenn erfolgreich, gib Response zurück
+        if (response.ok) {
+          return response;
+        }
+        
+        // Bei 504 Gateway Timeout, versuche Retry
+        if (response.status === 504 || response.status === 503) {
+          // Warte mit Exponential Backoff bevor Retry
+          if (attempt < maxRetries - 1) {
+            const delay = retryDelay * Math.pow(2, attempt);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+        }
+        
+        // Bei anderen Fehlern, versuche nächsten Server
+        if (response.status !== 504 && response.status !== 503) {
+          lastError = new Error(`Overpass API error: ${response.status} ${response.statusText}`);
+          break; // Versuche nächsten Server
+        }
+        
+        lastError = new Error(`Overpass API error: ${response.status} ${response.statusText}`);
+      } catch (error: any) {
+        // Bei AbortError (Timeout), versuche Retry
+        if (error.name === 'AbortError' && attempt < maxRetries - 1) {
+          const delay = retryDelay * Math.pow(2, attempt);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        lastError = error;
+        // Bei anderen Fehlern, versuche nächsten Server
+        if (error.name !== 'AbortError') {
+          break;
+        }
+      }
+    }
+  }
+  
+  // Alle Server und Retries fehlgeschlagen
+  throw lastError || new Error('Overpass API: All servers failed');
+}
+
+/**
  * Lädt einen Garten direkt über die OSM Way ID
  */
-export async function loadGardenByWayId(wayId: number): Promise<OSMWay | null> {
+export async function loadGardenByWayId(wayId: number, forceRefresh: boolean = false): Promise<OSMWay | null> {
   const cacheKey = `garden_way_${wayId}`;
-  const cached = getFromCache<OSMWay>(cacheKey);
-  if (cached) {
-    return cached;
+  if (!forceRefresh) {
+    const cached = getFromCache<OSMWay>(cacheKey);
+    if (cached) {
+      return cached;
+    }
   }
 
   const query = `
@@ -36,23 +143,14 @@ export async function loadGardenByWayId(wayId: number): Promise<OSMWay | null> {
   `;
 
   try {
-    const response = await fetch(OVERPASS_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: `data=${encodeURIComponent(query)}`,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Overpass API error: ${response.statusText}`);
-    }
+    const response = await fetchOverpassAPI(query);
 
     const data: OSMResponse = await response.json();
     
     if (data.elements && data.elements.length > 0) {
       const result = data.elements[0];
-      setCache(cacheKey, result, 7 * 24 * 60 * 60 * 1000);
+      // 2 Stunden TTL für Way-ID Lookups
+      setCache(cacheKey, result, 2 * 60 * 60 * 1000);
       return result;
     }
 
@@ -67,6 +165,40 @@ export async function loadGardenByWayId(wayId: number): Promise<OSMWay | null> {
     }
     return null;
   }
+}
+
+/**
+ * Hybrid-Ansatz: Gibt sofort gecachte Daten zurück und aktualisiert im Hintergrund
+ * @param wayId Die OSM Way ID
+ * @param onUpdate Callback der aufgerufen wird, wenn neue Daten verfügbar sind
+ * @returns Gecachte Daten (falls vorhanden) oder null
+ */
+export function loadGardenByWayIdWithUpdate(
+  wayId: number,
+  onUpdate?: (garden: OSMWay | null) => void
+): OSMWay | null {
+  const cacheKey = `garden_way_${wayId}`;
+  
+  // Gib sofort gecachte Daten zurück
+  const cached = getFromCache<OSMWay>(cacheKey);
+  
+  // Starte Background-Update (nicht await, läuft parallel)
+  loadGardenByWayId(wayId, false)
+    .then((updatedGarden) => {
+      // Nur Callback aufrufen wenn sich Daten geändert haben
+      if (updatedGarden && (!cached || cached.id !== updatedGarden.id || JSON.stringify(cached.geometry) !== JSON.stringify(updatedGarden.geometry))) {
+        onUpdate?.(updatedGarden);
+      } else if (!updatedGarden && cached) {
+        // Cache wurde gelöscht oder nicht gefunden
+        onUpdate?.(null);
+      }
+    })
+    .catch((error) => {
+      // Bei Fehler einfach ignorieren, Cache bleibt bestehen
+      console.error('Background update failed:', error);
+    });
+  
+  return cached;
 }
 
 /**
@@ -109,20 +241,8 @@ export async function findEnclosingParcel(gardenWay: OSMWay): Promise<string | n
   `;
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 Sekunden Timeout
+    const response = await fetchOverpassAPI(query, 2, 1500); // Weniger Retries für Parzellensuche
     
-    const response = await fetch(OVERPASS_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: `data=${encodeURIComponent(query)}`,
-      signal: controller.signal,
-    });
-    
-    clearTimeout(timeoutId);
-
     if (!response.ok) {
       return null;
     }
@@ -265,57 +385,49 @@ function isPointInPolygon(point: { lat: number; lon: number }, polygon: Array<{ 
  * Sucht einen Garten in OpenStreetMap anhand der Garten-Nummer
  * Verwendet Caching um API-Aufrufe zu reduzieren
  */
-export async function searchGardenByNumber(gardenNumber: string): Promise<OSMWay | null> {
-  // Prüfe zuerst den Cache
+export async function searchGardenByNumber(gardenNumber: string, forceRefresh: boolean = false): Promise<OSMWay | null> {
+  // Prüfe zuerst den Cache (außer bei Force Refresh)
   const cacheKey = CacheKeys.GARDEN(gardenNumber);
-  const cached = getFromCache<OSMWay>(cacheKey);
-  if (cached) {
-    return cached;
+  if (!forceRefresh) {
+    const cached = getFromCache<OSMWay>(cacheKey);
+    if (cached) {
+      return cached;
+    }
   }
 
   // Overpass Query: Suche nach allotments=plot mit name=gardenNumber
   // Suche im Bereich Osnabrück (Bounding Box)
+  // Suche auch nach Varianten wie "Garten 1027" oder nur nach der Nummer
   const query = `
     [out:json][timeout:15];
     (
       way["allotments"="plot"]["name"="${gardenNumber}"](52.2,7.9,52.35,8.15);
+      way["allotments"="plot"]["name"~"^${gardenNumber}$"](52.2,7.9,52.35,8.15);
+      way["allotments"="plot"]["name"~"Garten ${gardenNumber}"](52.2,7.9,52.35,8.15);
     );
     out geom;
   `;
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 Sekunden Timeout
-    
-    const response = await fetch(OVERPASS_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: `data=${encodeURIComponent(query)}`,
-      signal: controller.signal,
-    });
-    
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`Overpass API error: ${response.statusText}`);
-    }
-
+    const response = await fetchOverpassAPI(query);
     const data: OSMResponse = await response.json();
     
     if (data.elements && data.elements.length > 0) {
-      const result = data.elements[0];
-      // Speichere im Cache (7 Tage TTL für einzelne Gärten)
-      setCache(cacheKey, result, 7 * 24 * 60 * 60 * 1000);
+      // Finde den passendsten Eintrag (exakte Übereinstimmung zuerst)
+      let result = data.elements.find(el => el.tags.name === gardenNumber);
+      if (!result) {
+        // Fallback: Nimm den ersten Eintrag
+        result = data.elements[0];
+      }
+      
+      // Speichere im Cache (2 Stunden TTL für einzelne Gärten - kürzer für schnellere Updates)
+      setCache(cacheKey, result, 2 * 60 * 60 * 1000);
       return result;
     }
 
     return null;
   } catch (error: any) {
-    if (error.name !== 'AbortError') {
-      console.error('Error searching garden in OSM:', error);
-    }
+    console.error('Error searching garden in OSM:', error);
     // Bei Fehler: Versuche aus Cache zu laden (auch wenn abgelaufen)
     const staleCache = getFromCache<OSMWay>(cacheKey);
     if (staleCache) {
@@ -326,14 +438,50 @@ export async function searchGardenByNumber(gardenNumber: string): Promise<OSMWay
 }
 
 /**
+ * Hybrid-Ansatz: Gibt sofort gecachte Daten zurück und aktualisiert im Hintergrund
+ * @param gardenNumber Die Gartennummer
+ * @param onUpdate Callback der aufgerufen wird, wenn neue Daten verfügbar sind
+ * @returns Gecachte Daten (falls vorhanden) oder null
+ */
+export function searchGardenByNumberWithUpdate(
+  gardenNumber: string,
+  onUpdate?: (garden: OSMWay | null) => void
+): OSMWay | null {
+  const cacheKey = CacheKeys.GARDEN(gardenNumber);
+  
+  // Gib sofort gecachte Daten zurück
+  const cached = getFromCache<OSMWay>(cacheKey);
+  
+  // Starte Background-Update (nicht await, läuft parallel)
+  searchGardenByNumber(gardenNumber, false)
+    .then((updatedGarden) => {
+      // Nur Callback aufrufen wenn sich Daten geändert haben
+      if (updatedGarden && (!cached || cached.id !== updatedGarden.id || JSON.stringify(cached.geometry) !== JSON.stringify(updatedGarden.geometry))) {
+        onUpdate?.(updatedGarden);
+      } else if (!updatedGarden && cached) {
+        // Cache wurde gelöscht oder nicht gefunden
+        onUpdate?.(null);
+      }
+    })
+    .catch((error) => {
+      // Bei Fehler einfach ignorieren, Cache bleibt bestehen
+      console.error('Background update failed:', error);
+    });
+  
+  return cached;
+}
+
+/**
  * Lädt alle Gärten im Bereich Deutsche Scholle Osnabrück
  * Verwendet Caching um API-Aufrufe zu reduzieren
  */
-export async function loadAllGardens(): Promise<OSMWay[]> {
-  // Prüfe zuerst den Cache
-  const cached = getFromCache<OSMWay[]>(CacheKeys.ALL_GARDENS);
-  if (cached && cached.length > 0) {
-    return cached;
+export async function loadAllGardens(forceRefresh: boolean = false): Promise<OSMWay[]> {
+  // Prüfe zuerst den Cache (außer bei Force Refresh)
+  if (!forceRefresh) {
+    const cached = getFromCache<OSMWay[]>(CacheKeys.ALL_GARDENS);
+    if (cached && cached.length > 0) {
+      return cached;
+    }
   }
 
   // Overpass Query: Lade alle allotments=plot im Bereich
@@ -346,30 +494,13 @@ export async function loadAllGardens(): Promise<OSMWay[]> {
   `;
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 Sekunden Timeout
-    
-    const response = await fetch(OVERPASS_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: `data=${encodeURIComponent(query)}`,
-      signal: controller.signal,
-    });
-    
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`Overpass API error: ${response.statusText}`);
-    }
-
+    const response = await fetchOverpassAPI(query);
     const data: OSMResponse = await response.json();
     const gardens = data.elements || [];
     
-    // Speichere im Cache (24 Stunden TTL für alle Gärten)
+    // Speichere im Cache (1 Stunde TTL für alle Gärten - kürzer für schnellere Updates)
     if (gardens.length > 0) {
-      setCache(CacheKeys.ALL_GARDENS, gardens);
+      setCache(CacheKeys.ALL_GARDENS, gardens, 60 * 60 * 1000);
     }
     
     return gardens;
@@ -384,6 +515,34 @@ export async function loadAllGardens(): Promise<OSMWay[]> {
     }
     return [];
   }
+}
+
+/**
+ * Hybrid-Ansatz: Gibt sofort gecachte Daten zurück und aktualisiert im Hintergrund
+ * @param onUpdate Callback der aufgerufen wird, wenn neue Daten verfügbar sind
+ * @returns Gecachte Daten (falls vorhanden) oder leeres Array
+ */
+export function loadAllGardensWithUpdate(
+  onUpdate?: (gardens: OSMWay[]) => void
+): OSMWay[] {
+  // Gib sofort gecachte Daten zurück
+  const cached = getFromCache<OSMWay[]>(CacheKeys.ALL_GARDENS) || [];
+  
+  // Starte Background-Update (nicht await, läuft parallel)
+  loadAllGardens(false)
+    .then((updatedGardens) => {
+      // Nur Callback aufrufen wenn sich Daten geändert haben
+      if (updatedGardens.length !== cached.length || 
+          updatedGardens.some((g, i) => !cached[i] || cached[i].id !== g.id)) {
+        onUpdate?.(updatedGardens);
+      }
+    })
+    .catch((error) => {
+      // Bei Fehler einfach ignorieren, Cache bleibt bestehen
+      console.error('Background update failed:', error);
+    });
+  
+  return cached;
 }
 
 /**

@@ -36,6 +36,14 @@
   pointer-events: none !important;
 }
 
+/* Invertiertes Label für freie Gärten */
+.garden-label-available {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+}
+
 .garden-label-clickable {
   pointer-events: auto !important;
 }
