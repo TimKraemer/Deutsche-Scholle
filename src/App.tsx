@@ -9,11 +9,8 @@ import CookieConsentContent from './components/CookieConsentContent';
 import { loadAllGardens, loadAllGardensWithUpdate, searchGardenByNumber, searchGardenByNumberWithUpdate } from './utils/osm';
 import type { OSMWay } from './utils/osm';
 import { findGardenByNumber, mockGardens } from './data/mockGardens';
-
-interface CookiePreferences {
-  googleMaps: boolean;
-  openStreetMap: boolean;
-}
+import type { CookiePreferences } from './types/cookies';
+import { loadCookiePreferences } from './utils/cookies';
 
 function App() {
   const navigate = useNavigate();
@@ -24,28 +21,13 @@ function App() {
   });
   const [searchError, setSearchError] = useState<string | null>(null);
   const [hoveredGardenNumber, setHoveredGardenNumber] = useState<string | null>(null);
+  const [filteredGardens, setFilteredGardens] = useState<Garden[]>([]);
   const cookieConsentRef = useRef<CookieConsentRef>(null);
 
   // Lade initiale Cookie-Präferenzen beim Start
   useEffect(() => {
-    const getCookie = (name: string): string | null => {
-      const value = `; ${document.cookie}`;
-      const parts = value.split(`; ${name}=`);
-      if (parts.length === 2) {
-        return parts.pop()?.split(';').shift() || null;
-      }
-      return null;
-    };
-
-    const savedGoogleMaps = getCookie('cookie_consent_google_maps');
-    const savedOSM = getCookie('cookie_consent_openstreetmap');
-
-    if (savedGoogleMaps !== null && savedOSM !== null) {
-      setCookiePreferences({
-        googleMaps: savedGoogleMaps === 'true',
-        openStreetMap: savedOSM === 'true',
-      });
-    }
+    const preferences = loadCookiePreferences();
+    setCookiePreferences(preferences);
   }, []);
 
   const handleConsentChange = (preferences: { googleMaps: boolean | null; openStreetMap: boolean | null }) => {
@@ -56,13 +38,18 @@ function App() {
   };
 
   // Lade alle Gärten nur wenn OSM-Zustimmung gegeben wurde
+  // Warum Cookie-Check?
+  // - DSGVO-konform: Keine API-Calls ohne Zustimmung
+  // - Verhindert unnötige Requests wenn Benutzer OSM nicht aktiviert hat
   useEffect(() => {
     if (!cookiePreferences.openStreetMap) {
       return;
     }
 
     // Hybrid-Ansatz: Zeige sofort gecachte Daten, aktualisiere im Hintergrund
-    // Verwende forceRefresh=false für Background-Update, damit neue Gärten gefunden werden
+    // Warum?
+    // - Sofortige Anzeige für bessere UX (kein Warten auf großen API-Request)
+    // - Hintergrund-Update stellt sicher, dass neue Gärten gefunden werden
     const cachedGardens = loadAllGardensWithUpdate((updatedGardens) => {
       // Callback wird aufgerufen wenn neue Daten verfügbar sind
       setAllGardens(updatedGardens);
@@ -73,6 +60,7 @@ function App() {
       setAllGardens(cachedGardens);
     } else {
       // Wenn kein Cache vorhanden, lade sofort (ohne Cache)
+      // Fallback für ersten Besuch oder nach Cache-Löschung
       loadAllGardens(false).then((gardens: OSMWay[]) => {
         if (gardens.length > 0) {
           setAllGardens(gardens);
@@ -87,6 +75,9 @@ function App() {
     setSearchError(null);
     
     // Prüfe zuerst ob der Garten in den Mock-Daten existiert
+    // Warum zuerst Mock-Daten?
+    // - Lokale Datenbank ist schneller als API-Request
+    // - Enthält zusätzliche Informationen (Preis, Verfügbarkeit, etc.)
     const garden = findGardenByNumber(gardenNumber);
     
     if (garden) {
@@ -96,11 +87,14 @@ function App() {
     }
     
     // Wenn nicht in Datenbank, prüfe in OSM (nur wenn Zustimmung gegeben)
+    // Warum OSM-Check?
+    // - Einige Gärten existieren nur in OSM (noch nicht in Datenbank)
+    // - Ermöglicht Suche auch für nicht-verfügbare Gärten
     if (cookiePreferences.openStreetMap) {
       // Hybrid-Ansatz: Zeige sofort gecachte Daten, aktualisiere im Hintergrund
       const cachedOsmWay = searchGardenByNumberWithUpdate(gardenNumber, (updatedWay) => {
         // Callback wird aufgerufen wenn neue Daten verfügbar sind
-        // Navigiere nur wenn noch auf der Startseite
+        // Navigiere nur wenn noch auf der Startseite (verhindert Navigation während User bereits navigiert)
         if (updatedWay && window.location.pathname === '/') {
           navigate(`/${gardenNumber}`);
         }
@@ -115,6 +109,8 @@ function App() {
       // Wenn kein Cache vorhanden, warte auf OSM-Request
       try {
         // Versuche mit forceRefresh um sicherzustellen, dass wir die neuesten Daten bekommen
+        // Warum forceRefresh?
+        // - Bei Suche wollen wir aktuelle Daten (Garten könnte gerade hinzugefügt worden sein)
         const osmWay = await searchGardenByNumber(gardenNumber, true);
         if (osmWay) {
           // Garten in OSM gefunden, navigiere zur Detailseite
@@ -123,7 +119,7 @@ function App() {
         }
       } catch (err) {
         console.error('Error searching in OSM:', err);
-        // Weiter mit Fehlerbehandlung
+        // Weiter mit Fehlerbehandlung (zeigt Fehlermeldung unten)
       }
     }
     
@@ -138,37 +134,41 @@ function App() {
   return (
     <>
       <CookieConsent ref={cookieConsentRef} onConsentChange={handleConsentChange} />
-      <div className="h-screen bg-scholle-bg flex flex-col overflow-hidden">
-        <div className="container mx-auto px-4 py-8 flex-shrink-0">
-          <header className="mb-8">
-            <h1 className="text-4xl font-bold text-scholle-text mb-2">
-              Kleingartenverein Deutsche Scholle
-            </h1>
-            <p className="text-scholle-text-light">
-              Finden Sie freie Gärten auf der Karte
-            </p>
-          </header>
+      <div className="min-h-screen bg-scholle-bg flex flex-col lg:h-screen lg:overflow-hidden">
+        <div className="container mx-auto px-4 py-4 flex-shrink-0">
+          {/* Header und Suche nebeneinander auf großen Bildschirmen */}
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
+            <header className="flex-shrink-0">
+              <h1 className="text-2xl lg:text-3xl font-bold text-scholle-text mb-1">
+                Kleingartenverein Deutsche Scholle
+              </h1>
+              <p className="text-sm lg:text-base text-scholle-text-light">
+                Finden Sie freie Gärten auf der Karte
+              </p>
+            </header>
 
-          <div className="mb-6">
-            <GardenSearch onSearch={handleSearch} isLoading={false} error={searchError} onErrorDismiss={() => setSearchError(null)} />
+            <div className="flex-shrink-0 lg:w-96">
+              <GardenSearch onSearch={handleSearch} isLoading={false} error={searchError} onErrorDismiss={() => setSearchError(null)} />
+            </div>
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col min-h-0 px-4 pb-4 overflow-hidden">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0 overflow-hidden">
+        <div className="flex-1 flex flex-col px-4 pb-4 lg:min-h-0 lg:overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:flex-1 lg:min-h-0 lg:overflow-hidden">
             {/* Liste der freien Gärten */}
-            <div className="lg:col-span-1 flex flex-col min-h-0 overflow-hidden">
+            <div className="lg:col-span-1 flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
               <GardenList 
                 gardens={mockGardens} 
                 onGardenClick={handleGardenClick}
                 hoveredGardenNumber={hoveredGardenNumber}
                 onGardenHover={setHoveredGardenNumber}
+                onFilteredGardensChange={setFilteredGardens}
               />
             </div>
 
             {/* Karte */}
             <div className="lg:col-span-2 flex flex-col min-h-0 overflow-hidden">
-              <div className="flex-1 min-h-[350px] flex flex-col relative">
+              <div className="flex-1 min-h-[350px] lg:min-h-[350px] aspect-square lg:aspect-auto flex flex-col relative">
                 {/* Graue Box als Platzhalter für die Karte */}
                 <div className="absolute inset-0 bg-scholle-border rounded-lg border border-scholle-border" />
                 
@@ -177,7 +177,7 @@ function App() {
                     selectedGarden={null} 
                     osmGeometry={undefined}
                     allGardens={allGardens}
-                    availableGardens={mockGardens.filter(g => g.availableFrom && g.availableFrom.trim() !== '')}
+                    availableGardens={filteredGardens}
                     hoveredGardenNumber={hoveredGardenNumber}
                     onGardenHover={setHoveredGardenNumber}
                     onGardenClick={handleGardenClick}
@@ -197,6 +197,17 @@ function App() {
               </div>
             </div>
           </div>
+        </div>
+        
+        {/* Footer mit Hinweis zu Fehlern */}
+        <div className="flex-shrink-0 border-t border-scholle-border bg-scholle-bg-light px-4 py-2">
+          <p className="text-xs text-scholle-text-light text-center">
+            Fehler in der Karte? Bitte melden Sie diese an{' '}
+            <a href="mailto:scholle-map@tk22.de" className="text-scholle-blue hover:text-scholle-blue-dark underline">
+              scholle-map@tk22.de
+            </a>
+            {' '}oder direkt beim Verein.
+          </p>
         </div>
       </div>
     </>

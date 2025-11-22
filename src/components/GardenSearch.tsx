@@ -32,8 +32,8 @@ export default function GardenSearch({ onSearch, isLoading = false, error = null
           type="text"
           value={gardenNumber}
           onChange={handleInputChange}
-          placeholder="Garten-Nr. eingeben (z.B. 1050)"
-          className={`flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-scholle-green focus:border-transparent bg-scholle-bg-container ${
+          placeholder="Garten-Nr. (z.B. 1050)"
+          className={`flex-1 px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-scholle-green focus:border-transparent bg-scholle-bg-container ${
             error ? 'border-red-300 bg-red-50' : 'border-scholle-border'
           }`}
           disabled={isLoading}
@@ -41,7 +41,7 @@ export default function GardenSearch({ onSearch, isLoading = false, error = null
         <button
           type="submit"
           disabled={isLoading || !gardenNumber.trim()}
-          className="px-6 py-2 bg-scholle-green text-white rounded-lg hover:bg-scholle-green-dark disabled:bg-scholle-border disabled:cursor-not-allowed transition-colors"
+          className="px-4 py-1.5 text-sm bg-scholle-green text-white rounded-lg hover:bg-scholle-green-dark disabled:bg-scholle-border disabled:cursor-not-allowed transition-colors whitespace-nowrap"
         >
           {isLoading ? 'Suche...' : 'Suche'}
         </button>

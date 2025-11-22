@@ -58,6 +58,9 @@ export function setCache<T>(key: string, data: T, ttl: number = DEFAULT_TTL): vo
   } catch (error) {
     console.error('Error writing to cache:', error);
     // Wenn localStorage voll ist, versuche alte Einträge zu löschen
+    // Warum?
+    // - localStorage hat begrenzten Speicherplatz (~5-10MB)
+    // - Automatische Bereinigung ermöglicht weitere Nutzung ohne Fehler
     try {
       clearExpiredCache();
       localStorage.setItem(`${CACHE_PREFIX}${key}`, JSON.stringify({

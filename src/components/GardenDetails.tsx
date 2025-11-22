@@ -1,5 +1,6 @@
 import type { Garden } from '../types/garden';
 import GardenChecklist from './GardenChecklist';
+import { formatDate, formatCurrency } from '../utils/formatting';
 
 interface GardenDetailsProps {
   garden: Garden | null;
@@ -34,8 +35,8 @@ export default function GardenDetails({ garden, gardenNumber, osmParcel, osmSize
     const displaySize = garden?.osmSize || osmSize || garden?.size || null;
 
     return (
-      <div className="w-full bg-scholle-bg-container rounded-lg border border-scholle-border shadow-sm flex flex-col h-full overflow-visible">
-        <div className="p-6 space-y-4 overflow-y-auto flex-1 overflow-x-visible">
+      <div className="w-full bg-scholle-bg-container rounded-lg border border-scholle-border shadow-sm flex flex-col lg:h-full lg:min-h-0 overflow-hidden">
+        <div className="p-6 space-y-4 overflow-y-auto flex-1 min-h-0 overflow-x-visible">
           <h2 className="text-2xl font-bold mb-4 text-scholle-text border-b border-scholle-border pb-2">Gartendetails</h2>
           
           <div className="space-y-4">
@@ -69,12 +70,12 @@ export default function GardenDetails({ garden, gardenNumber, osmParcel, osmSize
                         </p>
                       )}
                       <p className="text-sm text-scholle-text-light">
-                        {garden.osmSize} m² <span className="text-xs">(OSM berechnet)</span>
+                        {garden.osmSize} m² <span className="text-xs">(aus der Karte berechnet)</span>
                       </p>
                     </>
                   ) : (
                     <p className="text-lg text-scholle-text">
-                      {displaySize} m² {osmSize ? <span className="text-sm text-scholle-text-light">(OSM berechnet)</span> : ''}
+                      {displaySize} m² {osmSize ? <span className="text-sm text-scholle-text-light">(aus der Karte berechnet)</span> : ''}
                     </p>
                   )}
                 </div>
@@ -90,7 +91,7 @@ export default function GardenDetails({ garden, gardenNumber, osmParcel, osmSize
                 </div>
                 <div className="ml-3 flex-1">
                   <p className="text-yellow-700 font-medium">
-                    Der Garten ist derzeit bereits verpachtet und nicht frei zur Verpachtung.
+                    Der Garten ist derzeit bereits verpachtet und steht nicht zur Verfügung.
                   </p>
                 </div>
               </div>
@@ -106,30 +107,6 @@ export default function GardenDetails({ garden, gardenNumber, osmParcel, osmSize
     return null;
   }
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return '-';
-    // Wenn "sofort" oder ähnliche Werte, direkt zurückgeben
-    if (dateString.toLowerCase() === 'sofort' || dateString.toLowerCase() === 'ab sofort') {
-      return 'Sofort';
-    }
-    try {
-      const date = new Date(dateString);
-      // Prüfe ob das Datum gültig ist
-      if (isNaN(date.getTime())) {
-        return dateString;
-      }
-      return date.toLocaleDateString('de-DE');
-    } catch {
-      return dateString;
-    }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('de-DE', {
-      style: 'currency',
-      currency: 'EUR',
-    }).format(amount);
-  };
 
   const getWaterConnectionLabel = (type: string) => {
     switch (type) {
@@ -198,7 +175,7 @@ export default function GardenDetails({ garden, gardenNumber, osmParcel, osmSize
   };
 
   return (
-    <div className="w-full bg-scholle-bg-container rounded-lg border border-scholle-border shadow-sm flex flex-col h-full min-h-0 overflow-hidden">
+    <div className="w-full bg-scholle-bg-container rounded-lg border border-scholle-border shadow-sm flex flex-col lg:h-full lg:min-h-0 overflow-hidden">
       <div className="p-6 overflow-y-auto flex-1 min-h-0 overflow-x-visible">
           <h2 className="text-2xl font-bold mb-4 text-scholle-text border-b border-scholle-border pb-2">Gartendetails</h2>
           
@@ -229,7 +206,7 @@ export default function GardenDetails({ garden, gardenNumber, osmParcel, osmSize
             </p>
             {garden.osmSize !== undefined && garden.osmSize !== null && (
               <p className="text-sm text-scholle-text-light">
-                {garden.osmSize} m² <span className="text-xs">(OSM berechnet)</span>
+                {garden.osmSize} m² <span className="text-xs">(aus der Karte berechnet)</span>
               </p>
             )}
           </div>

@@ -1,136 +1,209 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { Garden } from '../types/garden';
+import { sortGardens, filterAvailableGardens, type SortOption, type SortDirection, type SortConfig } from '../utils/gardenSort';
+import GardenFilters from './GardenFilters';
+import { LAST_DB_UPDATE } from '../data/mockGardens';
+import { formatDate, formatCurrency, formatLastUpdate } from '../utils/formatting';
 
 interface GardenListProps {
   gardens: Garden[];
   onGardenClick: (gardenNumber: string) => void;
   hoveredGardenNumber?: string | null;
   onGardenHover?: (gardenNumber: string | null) => void;
+  onFilteredGardensChange?: (filteredGardens: Garden[]) => void;
 }
 
-type SortOption = 'number' | 'availableFrom';
+export default function GardenList({ gardens, onGardenClick, hoveredGardenNumber, onGardenHover, onFilteredGardensChange }: GardenListProps) {
+  // Lade Sortierung aus localStorage oder verwende Standard
+  const [sortConfig, setSortConfig] = useState<SortConfig>(() => {
+    const savedField = localStorage.getItem('gardenSortBy');
+    const savedDirection = localStorage.getItem('gardenSortDirection') as SortDirection;
+    const validOptions: SortOption[] = ['number', 'availableFrom', 'size', 'valuation'];
+    const field = validOptions.includes(savedField as SortOption) ? (savedField as SortOption) : 'number';
+    const direction = (savedDirection === 'asc' || savedDirection === 'desc') ? savedDirection : 'asc';
+    return { field, direction };
+  });
 
-// Hilfsfunktion zum Parsen des "Frei ab" Datums
-const parseAvailableDate = (dateString: string): Date | null => {
-  if (!dateString) return null;
-  const lowerCaseDate = dateString.toLowerCase();
-  if (lowerCaseDate === 'sofort' || lowerCaseDate === 'ab sofort') {
-    return null; // "Sofort" wird als frühestes Datum behandelt
-  }
-  try {
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) {
-      return null;
-    }
-    return date;
-  } catch {
-    return null;
-  }
-};
-
-export default function GardenList({ gardens, onGardenClick, hoveredGardenNumber, onGardenHover }: GardenListProps) {
-  const [sortBy, setSortBy] = useState<SortOption>('number');
-
-  // Filtere freie Gärten (availableFrom gesetzt und nicht leer)
-  const availableGardens = gardens.filter(garden => 
-    garden.availableFrom && garden.availableFrom.trim() !== ''
-  );
-
-  // Sortiere nach ausgewählter Option
-  const sortedGardens = useMemo(() => {
-    return [...availableGardens].sort((a, b) => {
-      if (sortBy === 'number') {
-        const numA = parseInt(a.number, 10);
-        const numB = parseInt(b.number, 10);
-        return numA - numB;
-      } else {
-        // Sortiere nach "Frei ab" Datum
-        const dateA = parseAvailableDate(a.availableFrom);
-        const dateB = parseAvailableDate(b.availableFrom);
-        
-        // "Sofort" kommt zuerst
-        if (dateA === null && dateB === null) return 0;
-        if (dateA === null) return -1;
-        if (dateB === null) return 1;
-        
-        return dateA.getTime() - dateB.getTime();
-      }
+  // Speichere Sortierung in localStorage wenn sie geändert wird
+  const handleSortChange = (newField: SortOption) => {
+    setSortConfig(prev => {
+      // Wenn dasselbe Feld angeklickt wird, wechsle die Richtung
+      const newDirection = prev.field === newField && prev.direction === 'asc' ? 'desc' : 'asc';
+      const newConfig = { field: newField, direction: newDirection };
+      localStorage.setItem('gardenSortBy', newField);
+      localStorage.setItem('gardenSortDirection', newDirection);
+      return newConfig;
     });
-  }, [availableGardens, sortBy]);
-
-  const formatDate = (dateString: string) => {
-    if (!dateString) return '-';
-    const lowerCaseDate = dateString.toLowerCase();
-    if (lowerCaseDate === 'sofort' || lowerCaseDate === 'ab sofort') {
-      return 'Sofort';
-    }
-    try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) {
-        return dateString;
-      }
-      return date.toLocaleDateString('de-DE');
-    } catch {
-      return dateString;
-    }
   };
 
-  if (sortedGardens.length === 0) {
-    return (
-      <div className="bg-scholle-bg-container rounded-lg border border-scholle-border shadow-sm p-6 flex flex-col h-full min-h-0">
-        <h2 className="text-xl font-bold text-scholle-text mb-4">Freie Gärten</h2>
-        <p className="text-scholle-text-light">Aktuell sind keine freien Gärten verfügbar.</p>
-      </div>
-    );
-  }
+  // Filtere freie Gärten (availableFrom gesetzt und nicht leer)
+  const availableGardens = useMemo(() => filterAvailableGardens(gardens), [gardens]);
+
+  // Gefilterte Gärten (nach Filter-Kriterien)
+  const [filteredGardens, setFilteredGardens] = useState<Garden[]>(availableGardens);
+  const [hasActiveFilters, setHasActiveFilters] = useState(false);
+
+  // Aktualisiere gefilterte Gärten wenn sich verfügbare Gärten ändern
+  useEffect(() => {
+    setFilteredGardens(availableGardens);
+    setHasActiveFilters(false);
+  }, [availableGardens]);
+
+  // Informiere Parent über gefilterte Gärten
+  useEffect(() => {
+    onFilteredGardensChange?.(filteredGardens);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredGardens]);
+
+  const handleFilterChange = (filtered: Garden[]) => {
+    setFilteredGardens(filtered);
+  };
+
+  const handleFilterActiveChange = (isActive: boolean) => {
+    setHasActiveFilters(isActive);
+  };
+
+  // Sortiere nach ausgewählter Option und Richtung
+  const sortedGardens = useMemo(() => {
+    return sortGardens(filteredGardens, sortConfig.field, sortConfig.direction);
+  }, [filteredGardens, sortConfig]);
+
+
+  // Prüfe ob keine Ergebnisse wegen Filterung vorhanden sind
+  const hasNoResults = sortedGardens.length === 0;
+  const isFiltered = hasActiveFilters && availableGardens.length > 0;
+
 
   return (
-    <div className="bg-scholle-bg-container rounded-lg border border-scholle-border shadow-sm flex flex-col h-full min-h-0">
+    <div className="bg-scholle-bg-container rounded-lg border border-scholle-border shadow-sm flex flex-col lg:h-full lg:min-h-0">
       <div className="bg-scholle-green text-white px-4 py-3 rounded-t-lg flex-shrink-0">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-xl font-bold">Freie Gärten</h2>
         </div>
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-white/90">
-            {sortedGardens.length} {sortedGardens.length === 1 ? 'Garten verfügbar' : 'Gärten verfügbar'}
-          </p>
-          <div className="flex gap-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex flex-col">
+            <p className="text-sm text-white/90">
+              {sortedGardens.length} {sortedGardens.length === 1 ? 'Garten verfügbar' : 'Gärten verfügbar'}
+            </p>
+            <p className="text-xs text-white/70 mt-0.5">
+              Stand: {formatLastUpdate(LAST_DB_UPDATE)}
+            </p>
+          </div>
+          <div className="flex gap-2 flex-wrap">
             <button
-              onClick={() => setSortBy('number')}
-              className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
-                sortBy === 'number'
+              onClick={() => handleSortChange('number')}
+              className={`px-2 py-1 text-xs font-medium rounded transition-colors flex items-center gap-1 ${
+                sortConfig.field === 'number'
                   ? 'bg-white text-scholle-green'
                   : 'bg-white/20 text-white hover:bg-white/30'
               }`}
-              title="Nach Gartennummer sortieren"
+              title={`Nach Gartennummer sortieren (${sortConfig.field === 'number' ? sortConfig.direction === 'asc' ? 'aufsteigend' : 'absteigend' : 'aufsteigend'})`}
             >
-              Nr.
+              <span>Nr.</span>
+              {sortConfig.field === 'number' && (
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {sortConfig.direction === 'asc' ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  )}
+                </svg>
+              )}
             </button>
             <button
-              onClick={() => setSortBy('availableFrom')}
-              className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
-                sortBy === 'availableFrom'
+              onClick={() => handleSortChange('availableFrom')}
+              className={`px-2 py-1 text-xs font-medium rounded transition-colors flex items-center gap-1 ${
+                sortConfig.field === 'availableFrom'
                   ? 'bg-white text-scholle-green'
                   : 'bg-white/20 text-white hover:bg-white/30'
               }`}
-              title="Nach Verfügbarkeitsdatum sortieren"
+              title={`Nach Verfügbarkeitsdatum sortieren (${sortConfig.field === 'availableFrom' ? sortConfig.direction === 'asc' ? 'aufsteigend' : 'absteigend' : 'aufsteigend'})`}
             >
-              Frei ab
+              <span>Frei ab</span>
+              {sortConfig.field === 'availableFrom' && (
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {sortConfig.direction === 'asc' ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  )}
+                </svg>
+              )}
+            </button>
+            <button
+              onClick={() => handleSortChange('size')}
+              className={`px-2 py-1 text-xs font-medium rounded transition-colors flex items-center gap-1 ${
+                sortConfig.field === 'size'
+                  ? 'bg-white text-scholle-green'
+                  : 'bg-white/20 text-white hover:bg-white/30'
+              }`}
+              title={`Nach Größe sortieren (${sortConfig.field === 'size' ? sortConfig.direction === 'asc' ? 'aufsteigend' : 'absteigend' : 'aufsteigend'})`}
+            >
+              <span>Größe</span>
+              {sortConfig.field === 'size' && (
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {sortConfig.direction === 'asc' ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  )}
+                </svg>
+              )}
+            </button>
+            <button
+              onClick={() => handleSortChange('valuation')}
+              className={`px-2 py-1 text-xs font-medium rounded transition-colors flex items-center gap-1 ${
+                sortConfig.field === 'valuation'
+                  ? 'bg-white text-scholle-green'
+                  : 'bg-white/20 text-white hover:bg-white/30'
+              }`}
+              title={`Nach Preis sortieren (${sortConfig.field === 'valuation' ? sortConfig.direction === 'asc' ? 'aufsteigend' : 'absteigend' : 'aufsteigend'})`}
+            >
+              <span>Preis</span>
+              {sortConfig.field === 'valuation' && (
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {sortConfig.direction === 'asc' ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  )}
+                </svg>
+              )}
             </button>
           </div>
         </div>
       </div>
+      
+      {/* Filter */}
+      <GardenFilters gardens={availableGardens} onFilterChange={handleFilterChange} onFilterActiveChange={handleFilterActiveChange} />
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="divide-y divide-scholle-border">
-          {sortedGardens.map((garden) => {
+        {hasNoResults ? (
+          <div className="p-6 text-center">
+            {isFiltered ? (
+              <div className="space-y-2">
+                <p className="text-scholle-text-light font-medium">
+                  Unter den aktuellen Filtereinstellungen wurden keine Gärten gefunden.
+                </p>
+                <p className="text-sm text-scholle-text-light">
+                  Bitte passen Sie die Filter an, um weitere Ergebnisse zu sehen.
+                </p>
+              </div>
+            ) : (
+              <p className="text-scholle-text-light">Aktuell sind keine freien Gärten verfügbar.</p>
+            )}
+          </div>
+        ) : (
+          <div className="divide-y divide-scholle-border">
+            {sortedGardens.map((garden) => {
             const isHovered = hoveredGardenNumber === garden.number;
             return (
               <button
                 key={garden.id}
+                type="button"
                 onClick={() => onGardenClick(garden.number)}
                 onMouseEnter={() => onGardenHover?.(garden.number)}
                 onMouseLeave={() => onGardenHover?.(null)}
-                className={`w-full text-left p-4 transition-colors focus:outline-none focus:ring-2 focus:ring-scholle-green focus:ring-inset ${
+                className={`w-full text-left p-4 transition-colors focus:outline-none focus:ring-2 focus:ring-scholle-green focus:ring-inset relative z-10 ${
                   isHovered 
                     ? 'bg-scholle-green/10 border-l-4 border-l-scholle-green' 
                     : 'hover:bg-scholle-bg-light'
@@ -157,11 +230,21 @@ export default function GardenList({ gardens, onGardenClick, hoveredGardenNumber
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{garden.parcel}</span>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4 flex-wrap">
                       <span>{garden.size} m²</span>
                       <span className="text-scholle-green font-medium">
                         Frei ab {formatDate(garden.availableFrom)}
                       </span>
+                    </div>
+                    <div className="flex items-center gap-4 flex-wrap pt-1">
+                      <span className="font-medium text-scholle-text">
+                        Wert: {formatCurrency(garden.valuation)}
+                      </span>
+                      {garden.valueReduction > 0 && (
+                        <span className="text-red-600 font-medium">
+                          -{formatCurrency(garden.valueReduction)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -172,7 +255,8 @@ export default function GardenList({ gardens, onGardenClick, hoveredGardenNumber
             </button>
             );
           })}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

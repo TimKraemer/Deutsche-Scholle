@@ -5,17 +5,6 @@ import type { Garden } from '../types/garden';
  */
 export const mockGardens: Garden[] = [
   {
-    id: 'garden-1050',
-    number: '1050',
-    parcel: 'Klostergärten 1',
-    size: 375, // m²
-    availableFrom: '2025-01-01',
-    valuation: 1680, // €
-    valueReduction: 45, // €
-    hasElectricity: true,
-    waterConnection: 'brunnen',
-  },
-  {
     id: 'garden-1027',
     number: '1027',
     parcel: 'Klostergärten 1',
@@ -23,8 +12,6 @@ export const mockGardens: Garden[] = [
     availableFrom: '2027-01-01',
     valuation: 865,
     valueReduction: 292,
-    hasElectricity: false,
-    waterConnection: 'kein',
   },
   {
     id: 'garden-249',
@@ -34,8 +21,6 @@ export const mockGardens: Garden[] = [
     availableFrom: '',
     valuation: 0,
     valueReduction: 300,
-    hasElectricity: false,
-    waterConnection: 'kein',
   },
   {
     id: 'garden-272',
@@ -45,8 +30,6 @@ export const mockGardens: Garden[] = [
     availableFrom: 'sofort',
     valuation: 0,
     valueReduction: 1525,
-    hasElectricity: false,
-    waterConnection: 'kein',
   },
   {
     id: 'garden-274',
@@ -56,8 +39,6 @@ export const mockGardens: Garden[] = [
     availableFrom: '2026-01-01',
     valuation: 412,
     valueReduction: 75,
-    hasElectricity: false,
-    waterConnection: 'kein',
   },
   {
     id: 'garden-278',
@@ -67,8 +48,6 @@ export const mockGardens: Garden[] = [
     availableFrom: 'sofort',
     valuation: 0,
     valueReduction: 1521,
-    hasElectricity: false,
-    waterConnection: 'kein',
   },
   {
     id: 'garden-293',
@@ -78,8 +57,6 @@ export const mockGardens: Garden[] = [
     availableFrom: 'sofort',
     valuation: 223,
     valueReduction: 340,
-    hasElectricity: false,
-    waterConnection: 'kein',
   },
   {
     id: 'garden-427',
@@ -89,8 +66,6 @@ export const mockGardens: Garden[] = [
     availableFrom: 'sofort',
     valuation: 1007,
     valueReduction: 255,
-    hasElectricity: false,
-    waterConnection: 'kein',
   },
   {
     id: 'garden-450',
@@ -100,8 +75,6 @@ export const mockGardens: Garden[] = [
     availableFrom: 'sofort',
     valuation: 0,
     valueReduction: 1055,
-    hasElectricity: false,
-    waterConnection: 'kein',
   },
   {
     id: 'garden-491',
@@ -111,8 +84,6 @@ export const mockGardens: Garden[] = [
     availableFrom: 'sofort',
     valuation: 0,
     valueReduction: 936,
-    hasElectricity: false,
-    waterConnection: 'kein',
   },
   {
     id: 'garden-496',
@@ -122,8 +93,6 @@ export const mockGardens: Garden[] = [
     availableFrom: 'sofort',
     valuation: 525,
     valueReduction: 630,
-    hasElectricity: false,
-    waterConnection: 'kein',
   },
   {
     id: 'garden-531',
@@ -133,10 +102,14 @@ export const mockGardens: Garden[] = [
     availableFrom: 'sofort',
     valuation: 1164,
     valueReduction: 135,
-    hasElectricity: false,
-    waterConnection: 'kein',
   },
 ];
+
+/**
+ * Datum der letzten Änderung in der Datenbank
+ * Format: YYYY-MM-DD
+ */
+export const LAST_DB_UPDATE = '2025-11-22';
 
 /**
  * Findet einen Garten anhand der Nummer in den Mock-Daten

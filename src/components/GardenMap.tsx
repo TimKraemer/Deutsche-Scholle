@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { MapContainer, TileLayer, Polygon, Marker, useMap, Tooltip, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -8,6 +8,9 @@ import type { OSMWay } from '../utils/osm';
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 import CookieConsentHint from './CookieConsentHint';
+import { OSNABRUECK_BOUNDS, INITIAL_MAP_CENTER, INITIAL_MAP_ZOOM, MIN_ZOOM_FOR_LABELS, GOOGLE_MAPS_CONFIG } from '../utils/constants';
+import type { CookiePreferences } from '../types/cookies';
+import { calculateGardensBounds, applyBoundsPadding, isValidCoordinate, calculateGeometryCenter } from '../utils/mapHelpers';
 
 // Google Maps API Key aus Umgebungsvariable
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -50,47 +53,6 @@ const HighlightedIcon = createGreenMarkerIcon(30);
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
-/**
- * Berechnet den optimalen Zoom-Level basierend auf den Bounds und der Karten-Größe
- * Verwendet Leaflet's fitBounds Logik für präzise Berechnung
- */
-function calculateOptimalZoom(
-  bounds: [[number, number], [number, number]],
-  mapWidth: number,
-  mapHeight: number,
-  padding: number = 50
-): number {
-  const [[minLat, minLon], [maxLat, maxLon]] = bounds;
-  
-  // Verfügbarer Platz für die Karte (mit Padding)
-  const availableWidth = mapWidth - padding * 2;
-  const availableHeight = mapHeight - padding * 2;
-  
-  // Berechne die benötigte Breite und Höhe in Grad
-  const latDiff = maxLat - minLat;
-  const lonDiff = maxLon - minLon;
-  const centerLat = (minLat + maxLat) / 2;
-  
-  // Berechne Zoom-Level basierend auf Breite und Höhe
-  // Formel: zoom = log2(worldSize / tileSize / scale)
-  const worldSize = 256; // Standard Tile-Größe
-  
-  // Berechne für Breite und Höhe separat
-  const latZoom = Math.log2(
-    (availableHeight * 360) / (latDiff * worldSize)
-  );
-  const lonZoom = Math.log2(
-    (availableWidth * 360) / (lonDiff * worldSize * Math.cos(centerLat * Math.PI / 180))
-  );
-  
-  // Nimm den kleineren Zoom-Level (damit alles sichtbar ist)
-  let optimalZoom = Math.floor(Math.min(latZoom, lonZoom));
-  
-  // Begrenze auf gültigen Bereich
-  optimalZoom = Math.max(10, Math.min(22, optimalZoom));
-  
-  return optimalZoom;
-}
 
 interface MapControllerProps {
   garden: Garden | null;
@@ -101,36 +63,121 @@ function MapController({ garden, osmGeometry }: MapControllerProps) {
   const map = useMap();
 
   useEffect(() => {
-    if (garden && garden.bounds) {
-      const [[minLat, minLon], [maxLat, maxLon]] = garden.bounds;
-      
-      // Berechne optimalen Zoom-Level basierend auf Karten-Größe
-      const mapSize = map.getSize();
-      const optimalZoom = calculateOptimalZoom(
-        [[minLat, minLon], [maxLat, maxLon]],
-        mapSize.x,
-        mapSize.y,
-        150
-      );
-      
-      // Verwende den optimalen Zoom-Level (damit das ganze Grundstück sichtbar ist)
-      const finalZoom = optimalZoom;
-      
-      // Berechne Zentrum
-      const centerLat = (minLat + maxLat) / 2;
-      const centerLon = (minLon + maxLon) / 2;
-      
-      // Setze View mit optimalem Zoom
-      map.setView([centerLat, centerLon], finalZoom);
-    } else if (garden && garden.coordinates) {
-      map.setView(garden.coordinates, 18);
-    }
+    // Warte kurz, damit die Karte ihre Größe bestimmen kann
+    // React-Leaflet braucht Zeit für initiales Rendering, sonst sind getSize() Werte falsch
+    const timer = setTimeout(() => {
+      if (!garden) return;
+
+      // Priorität 1: Verwende osmGeometry wenn verfügbar (präziseste Darstellung)
+      if (osmGeometry && osmGeometry.length > 0) {
+        // Validiere alle Koordinaten
+        const validPoints = osmGeometry.filter(point => 
+          isValidCoordinate(point.lat, point.lon)
+        );
+
+        if (validPoints.length >= 3) {
+          // Berechne Bounds aus dem Polygon
+          const lats = validPoints.map(p => p.lat);
+          const lons = validPoints.map(p => p.lon);
+          const minLat = Math.min(...lats);
+          const maxLat = Math.max(...lats);
+          const minLon = Math.min(...lons);
+          const maxLon = Math.max(...lons);
+
+          // Verwende fitBounds für optimales Zoomen und Zentrieren
+          // Padding sorgt dafür, dass der Garten nicht am Rand klebt
+          const bounds: [[number, number], [number, number]] = [
+            [minLat, minLon],
+            [maxLat, maxLon]
+          ];
+          
+          map.fitBounds(bounds, {
+            padding: [50, 50], // Padding in Pixeln
+            maxZoom: 20, // Maximaler Zoom-Level für Detailansicht
+          });
+          return;
+        }
+      }
+
+      // Priorität 2: Verwende garden.bounds wenn verfügbar
+      if (garden.bounds) {
+        const [[minLat, minLon], [maxLat, maxLon]] = garden.bounds;
+        
+        // Verwende fitBounds für optimales Zoomen und Zentrieren
+        const bounds: [[number, number], [number, number]] = [
+          [minLat, minLon],
+          [maxLat, maxLon]
+        ];
+        
+        map.fitBounds(bounds, {
+          padding: [50, 50],
+          maxZoom: 20,
+        });
+        return;
+      }
+
+      // Priorität 3: Fallback auf Koordinaten mit festem Zoom-Level
+      if (garden.coordinates) {
+        map.setView(garden.coordinates, GOOGLE_MAPS_CONFIG.GARDEN_ZOOM);
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
   }, [garden, osmGeometry, map]);
 
   return null;
 }
 
-// Komponente zum Überwachen des Zoom-Levels
+interface AllGardensMapControllerProps {
+  allGardens: OSMWay[];
+}
+
+/**
+ * Controller für die Startseite: Berechnet Bounds aller Gärten und zoomt/zentriert die Karte entsprechend
+ * 
+ * Warum ein separater Controller?
+ * - React-Leaflet erfordert, dass Map-Operationen innerhalb von useMap() Hook ausgeführt werden
+ * - Trennung der Logik für bessere Wartbarkeit
+ */
+function AllGardensMapController({ allGardens }: AllGardensMapControllerProps) {
+  const map = useMap();
+  const lastGardensCountRef = useRef(0);
+
+  useEffect(() => {
+    // Nur aktualisieren wenn Gärten vorhanden sind
+    if (allGardens.length === 0) {
+      return;
+    }
+
+    // Warte kurz, damit die Karte ihre Größe bestimmen kann
+    // React-Leaflet braucht Zeit für initiales Rendering, sonst sind getSize() Werte falsch
+    const timer = setTimeout(() => {
+      const { minLat, maxLat, minLon, maxLon, hasValidBounds } = calculateGardensBounds(allGardens);
+
+      if (hasValidBounds) {
+        // Padding hinzufügen, damit Gärten nicht am Rand kleben
+        const bounds = applyBoundsPadding(minLat, maxLat, minLon, maxLon, 0.1);
+        map.fitBounds(bounds, {
+          padding: [50, 50],
+        });
+
+        lastGardensCountRef.current = allGardens.length;
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [allGardens, map]);
+
+  return null;
+}
+
+/**
+ * Komponente zum Überwachen des Zoom-Levels
+ * 
+ * Warum notwendig?
+ * - Labels werden nur bei hohem Zoom angezeigt (Performance-Optimierung)
+ * - React-Leaflet bietet keinen direkten State für Zoom-Level
+ */
 function ZoomWatcher({ onZoomChange }: { onZoomChange: (zoom: number) => void }) {
   const map = useMapEvents({
     zoomend: () => {
@@ -138,6 +185,7 @@ function ZoomWatcher({ onZoomChange }: { onZoomChange: (zoom: number) => void })
     },
   });
 
+  // Initialen Zoom-Level setzen (falls Karte bereits geladen ist)
   useEffect(() => {
     onZoomChange(map.getZoom());
   }, [map, onZoomChange]);
@@ -145,12 +193,20 @@ function ZoomWatcher({ onZoomChange }: { onZoomChange: (zoom: number) => void })
   return null;
 }
 
-// Komponente zum Aktualisieren der Karten-Größe
+/**
+ * Komponente zum Aktualisieren der Karten-Größe
+ * 
+ * Warum notwendig?
+ * - Leaflet berechnet Karten-Größe beim initialen Rendering
+ * - Bei dynamischen Layouts (z.B. Resize, Tab-Wechsel) muss Größe neu berechnet werden
+ * - Delay gibt Browser Zeit für Layout-Berechnung
+ */
 function MapSizeUpdater() {
   const map = useMap();
 
   useEffect(() => {
     // Aktualisiere die Größe nach einem kurzen Delay, damit der Container gerendert ist
+    // React braucht Zeit für Layout-Berechnung, sonst ist clientHeight noch 0
     const timer = setTimeout(() => {
       map.invalidateSize();
     }, 100);
@@ -176,10 +232,12 @@ function GardenPolygon({ garden, isSelected, showLabels, onGardenClick, mapType,
   if (!garden.geometry || garden.geometry.length === 0) return null;
 
   const coords = osmGeometryToLeafletCoords(garden.geometry);
-  const gardenNumber = garden.tags.name || '';
+  const gardenNumber = garden.tags.ref || ''; // ref ist das Standard-Tag für Gartennummern
   const isHovered = hoveredGardenNumber === gardenNumber;
 
   const handleClick = () => {
+    // In Satellitenansicht keine Klicks erlauben
+    if (mapType === 'satellite') return;
     if (gardenNumber) {
       onGardenClick(gardenNumber);
     }
@@ -187,6 +245,7 @@ function GardenPolygon({ garden, isSelected, showLabels, onGardenClick, mapType,
 
   // In Satellitenansicht: Nur Kontur, keine Füllung
   const fillOpacity = mapType === 'satellite' ? 0 : (isSelected ? 0.3 : 0.1);
+  const isClickable = mapType !== 'satellite';
 
   return (
     <Polygon
@@ -198,11 +257,11 @@ function GardenPolygon({ garden, isSelected, showLabels, onGardenClick, mapType,
         fillOpacity: fillOpacity,
         weight: isSelected ? 2 : 1,
       }}
-      eventHandlers={{
+      eventHandlers={isClickable ? {
         click: handleClick,
         mouseover: () => onGardenHover?.(gardenNumber),
         mouseout: () => onGardenHover?.(null),
-      }}
+      } : {}}
     >
       {gardenNumber && showLabels && (
         <Tooltip
@@ -212,7 +271,9 @@ function GardenPolygon({ garden, isSelected, showLabels, onGardenClick, mapType,
           opacity={1}
         >
           <span 
-            className={`font-semibold cursor-pointer transition-all ${
+            className={`font-semibold transition-all ${
+              isClickable ? 'cursor-pointer' : 'cursor-default'
+            } ${
               isAvailable 
                 ? isHovered 
                   ? 'text-white bg-scholle-green-dark text-lg px-2 py-1 rounded' 
@@ -221,12 +282,12 @@ function GardenPolygon({ garden, isSelected, showLabels, onGardenClick, mapType,
                   ? 'text-scholle-green-dark' 
                   : 'text-scholle-text hover:text-scholle-green'
             }`}
-            onClick={(e) => {
+            onClick={isClickable ? (e) => {
               e.stopPropagation();
               handleClick();
-            }}
-            onMouseEnter={() => onGardenHover?.(gardenNumber)}
-            onMouseLeave={() => onGardenHover?.(null)}
+            } : undefined}
+            onMouseEnter={isClickable ? () => onGardenHover?.(gardenNumber) : undefined}
+            onMouseLeave={isClickable ? () => onGardenHover?.(null) : undefined}
           >
             {gardenNumber}
           </span>
@@ -236,10 +297,6 @@ function GardenPolygon({ garden, isSelected, showLabels, onGardenClick, mapType,
   );
 }
 
-interface CookiePreferences {
-  googleMaps: boolean;
-  openStreetMap: boolean;
-}
 
 interface GardenMapProps {
   selectedGarden: Garden | null;
@@ -256,23 +313,98 @@ interface GardenMapProps {
 }
 
 export default function GardenMap({ selectedGarden, osmGeometry, allGardens, availableGardens = [], hoveredGardenNumber, onGardenHover, onGardenClick, defaultMapType = 'osm', cookiePreferences, onOpenCookieConsent, disable3D = false }: GardenMapProps) {
-  // Initiale Koordinaten für "Deutsche Scholle Osnabrück"
-  const initialCenter: [number, number] = [52.2568, 8.02725];
-  const initialZoom = 15;
-  
-  // Begrenze Kartenansicht auf Region Osnabrück (Stadtlevel)
-  const osnabrueckBounds = {
-    north: 52.35,  // ~10km nördlich
-    south: 52.15,  // ~10km südlich
-    east: 8.15,    // ~10km östlich
-    west: 7.9,     // ~10km westlich
-  };
-  
-  // Zoom-Level für Label-Anzeige (nur bei hohem Zoom und wenn kein Garten ausgewählt ist)
-  const MIN_ZOOM_FOR_LABELS = 17;
-  const [currentZoom, setCurrentZoom] = useState(initialZoom);
+  const [currentZoom, setCurrentZoom] = useState(INITIAL_MAP_ZOOM);
   const [mapType, setMapType] = useState<'osm' | 'satellite' | '3d'>(defaultMapType || 'osm');
-  const showLabels = currentZoom >= MIN_ZOOM_FOR_LABELS && !selectedGarden;
+  
+  // Zeige Labels in OSM-Ansicht wenn Zoom hoch genug ist (auch auf Detailseite)
+  const showLabels = currentZoom >= MIN_ZOOM_FOR_LABELS && mapType === 'osm';
+  
+  // Leaflet Bounds für maxBounds (using tighter bounds for map view)
+  const osnabrueckLeafletBounds: [[number, number], [number, number]] = [
+    [52.25, 8.0],
+    [52.27, 8.05]
+  ];
+  
+  // Memoize available garden numbers for faster lookups
+  // Set verwendet für O(1) Lookup-Performance statt O(n) mit Array.some()
+  const availableGardenNumbers = useMemo(() => 
+    new Set(availableGardens.map(g => g.number)),
+    [availableGardens]
+  );
+  
+  // Memoize OSM garden map for faster lookups
+  // Map verwendet für O(1) Lookup-Performance statt O(n) mit Array.find()
+  const osmGardenMap = useMemo(() => 
+    new Map(allGardens.map(g => [g.tags.ref || '', g])),
+    [allGardens]
+  );
+  
+  // Memoize garden polygons (only render when not in 3D mode)
+  // Verhindert unnötige Neuberechnung bei jedem Render (Performance-Optimierung)
+  const gardenPolygons = useMemo(() => {
+    if (mapType === '3d') return []; // In 3D-Modus werden Polygone nicht gerendert
+    
+    const effectiveMapType = mapType === 'satellite' ? 'satellite' : 'osm';
+    return allGardens.map((garden) => {
+      const gardenRef = garden.tags.ref || '';
+      const isSelected = !!(selectedGarden && selectedGarden.number === gardenRef);
+      const isAvailable = availableGardenNumbers.has(gardenRef);
+      return (
+        <GardenPolygon
+          key={garden.id}
+          garden={garden}
+          isSelected={isSelected}
+          showLabels={showLabels}
+          onGardenClick={onGardenClick}
+          mapType={effectiveMapType}
+          isAvailable={isAvailable}
+          hoveredGardenNumber={hoveredGardenNumber}
+          onGardenHover={onGardenHover}
+        />
+      );
+    });
+  }, [allGardens, availableGardenNumbers, selectedGarden, showLabels, mapType, hoveredGardenNumber, onGardenClick, onGardenHover]);
+  
+  // Memoize available garden markers
+  // Verhindert unnötige Neuberechnung bei jedem Render (Performance-Optimierung)
+  // Markers werden nur angezeigt wenn Labels nicht sichtbar sind (sonst redundant)
+  const availableMarkers = useMemo(() => {
+    if (mapType !== 'osm' || showLabels) return [];
+    
+    return availableGardens
+      .map((garden) => {
+        const osmGarden = osmGardenMap.get(garden.number);
+        
+        // Nur anzeigen wenn in OSM gefunden und Geometrie vorhanden
+        if (!osmGarden || !osmGarden.geometry || osmGarden.geometry.length === 0) {
+          return null;
+        }
+        
+        // Berechne Zentrum der Geometrie
+        const center = calculateGeometryCenter(osmGarden.geometry);
+        if (!center) return null;
+        
+        const isHovered = hoveredGardenNumber === garden.number;
+        
+        return (
+          <Marker
+            key={`available-${garden.id}`}
+            position={[center.lat, center.lon]}
+            icon={isHovered ? HighlightedIcon : GreenIcon}
+            eventHandlers={{
+              click: () => onGardenClick(garden.number),
+              mouseover: () => onGardenHover?.(garden.number),
+              mouseout: () => onGardenHover?.(null),
+            }}
+          >
+            <Tooltip permanent={false}>
+              Garten {garden.number}
+            </Tooltip>
+          </Marker>
+        );
+      })
+      .filter(Boolean);
+  }, [mapType, showLabels, availableGardens, osmGardenMap, hoveredGardenNumber, onGardenClick, onGardenHover]);
 
   // Wechsle automatisch zur OSM-Ansicht wenn 3D deaktiviert ist
   useEffect(() => {
@@ -327,8 +459,10 @@ export default function GardenMap({ selectedGarden, osmGeometry, allGardens, ava
     }
 
     // Warte auf OSM-Daten bevor 3D initialisiert wird
-    // Wenn ein Garten ausgewählt ist, warte auf osmGeometry
-    // Wenn kein Garten ausgewählt ist (Übersicht), warte auf allGardens
+    // Warum?
+    // - Google Maps 3D benötigt Koordinaten für Bounds-Berechnung
+    // - Ohne Daten würde Karte auf Standard-Position zentrieren (schlechte UX)
+    // - Verhindert unnötige API-Calls wenn Daten noch nicht verfügbar sind
     if (selectedGarden && !osmGeometry) {
       // Warte auf osmGeometry für ausgewählten Garten
       return;
@@ -336,6 +470,7 @@ export default function GardenMap({ selectedGarden, osmGeometry, allGardens, ava
     
     if (!selectedGarden && allGardens.length === 0 && cookiePreferences.openStreetMap) {
       // Warte auf allGardens für Übersicht (nur wenn OSM-Zustimmung gegeben)
+      // Ohne Gärten kann keine sinnvolle Bounds-Berechnung erfolgen
       return;
     }
 
@@ -345,14 +480,6 @@ export default function GardenMap({ selectedGarden, osmGeometry, allGardens, ava
       }
 
       const google = (window as any).google;
-
-      // Hilfsfunktion zur Validierung von Koordinaten
-      const isValidCoordinate = (lat: number, lon: number): boolean => {
-        return typeof lat === 'number' && typeof lon === 'number' && 
-               !isNaN(lat) && !isNaN(lon) && 
-               lat >= -90 && lat <= 90 && 
-               lon >= -180 && lon <= 180;
-      };
 
       // Berechne Bounds für alle Gärten oder nur den ausgewählten
       const bounds = new google.maps.LatLngBounds();
@@ -382,31 +509,33 @@ export default function GardenMap({ selectedGarden, osmGeometry, allGardens, ava
       
       // Fallback auf initiale Koordinaten wenn keine gültigen Bounds vorhanden
       if (!hasValidBounds) {
-        bounds.extend(new google.maps.LatLng(initialCenter[0], initialCenter[1]));
+        bounds.extend(new google.maps.LatLng(INITIAL_MAP_CENTER[0], INITIAL_MAP_CENTER[1]));
       }
 
       // Erstelle Google Maps mit 3D-Features
       const map = new google.maps.Map(googleMap3DRef.current, {
-        center: bounds.isEmpty() ? { lat: initialCenter[0], lng: initialCenter[1] } : bounds.getCenter(),
-        zoom: selectedGarden ? 18 : 15,
+        center: bounds.isEmpty() ? { lat: INITIAL_MAP_CENTER[0], lng: INITIAL_MAP_CENTER[1] } : bounds.getCenter(),
+        zoom: selectedGarden ? GOOGLE_MAPS_CONFIG.GARDEN_ZOOM : GOOGLE_MAPS_CONFIG.DEFAULT_ZOOM,
         mapTypeId: google.maps.MapTypeId.SATELLITE,
-        tilt: 45, // Neige die Kamera für 3D-Ansicht
+        tilt: GOOGLE_MAPS_CONFIG.TILT,
         heading: 0,
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: true,
         zoomControl: true,
+        zoomControlOptions: {
+          position: google.maps.ControlPosition.TOP_LEFT, // Gleiche Position wie OSM-Karte
+        },
         // Begrenze Kartenansicht auf Region Osnabrück (Stadtlevel)
         restriction: {
           latLngBounds: new google.maps.LatLngBounds(
-            { lat: osnabrueckBounds.south, lng: osnabrueckBounds.west },
-            { lat: osnabrueckBounds.north, lng: osnabrueckBounds.east }
+            { lat: OSNABRUECK_BOUNDS.south, lng: OSNABRUECK_BOUNDS.west },
+            { lat: OSNABRUECK_BOUNDS.north, lng: OSNABRUECK_BOUNDS.east }
           ),
           strictBounds: true, // Verhindert Rauszoomen über die Grenzen hinaus
         },
-        // Setze maximale Zoom-Stufe (Google Maps unterstützt bis zu 22-23 für Satellitenbilder)
-        maxZoom: 23,
-        minZoom: 12, // Höhere minimale Zoom-Stufe, damit man nicht zu weit rauszoomt
+        maxZoom: GOOGLE_MAPS_CONFIG.MAX_ZOOM,
+        minZoom: GOOGLE_MAPS_CONFIG.MIN_ZOOM,
       });
 
       googleMapInstanceRef.current = map;
@@ -415,6 +544,9 @@ export default function GardenMap({ selectedGarden, osmGeometry, allGardens, ava
       for (const garden of allGardens) {
         if (garden.geometry && garden.geometry.length > 0) {
           // Validiere alle Koordinaten bevor Polygon erstellt wird
+          // Warum?
+          // - Ungültige Koordinaten würden Google Maps API zum Absturz bringen
+          // - Filterung verhindert Fehler und verbessert Performance
           const validPath = garden.geometry
             .filter((point: { lat: number; lon: number }) => isValidCoordinate(point.lat, point.lon))
             .map((point: { lat: number; lon: number }) =>
@@ -422,27 +554,24 @@ export default function GardenMap({ selectedGarden, osmGeometry, allGardens, ava
             );
 
           // Überspringe wenn keine gültigen Koordinaten vorhanden
+          // Polygon benötigt mindestens 3 Punkte (Dreieck)
           if (validPath.length < 3) {
             continue;
           }
 
           const isSelected = selectedGarden && garden.tags?.ref === selectedGarden.number;
 
-          const polygon = new google.maps.Polygon({
+          // Erstelle Polygon für Visualisierung (nicht klickbar in Luftbildansicht)
+          // In Luftbildansicht (3D/Satellit) keine Klicks erlauben
+          // Polygone dienen nur zur Visualisierung, nicht zur Navigation
+          new google.maps.Polygon({
             paths: validPath,
             strokeColor: isSelected ? '#00FF00' : '#888888',
             strokeOpacity: isSelected ? 1.0 : 0.5,
             strokeWeight: isSelected ? 3 : 1,
             fillColor: isSelected ? '#00FF00' : '#888888',
             fillOpacity: 0, // Kein transparenter Hintergrund
-            map: map,
-          });
-
-          // Mache Polygon klickbar
-          polygon.addListener('click', () => {
-            if (garden.tags?.ref) {
-              onGardenClick(garden.tags.ref);
-            }
+            map: map, // Polygon wird durch map-Property automatisch angezeigt
           });
         }
       }
@@ -468,6 +597,9 @@ export default function GardenMap({ selectedGarden, osmGeometry, allGardens, ava
           googleMapPolygonRef.current = selectedPolygon;
 
           // Zoome zum ausgewählten Garten - warte kurz damit die Karte gerendert ist
+          // Warum setTimeout?
+          // - Google Maps braucht Zeit für initiales Rendering
+          // - fitBounds() funktioniert erst nach vollständigem Laden der Karte
           setTimeout(() => {
             try {
               const selectedBounds = new google.maps.LatLngBounds();
@@ -492,8 +624,11 @@ export default function GardenMap({ selectedGarden, osmGeometry, allGardens, ava
       }
 
       // Stelle sicher, dass 3D aktiviert ist
+      // Warum tilesloaded Event?
+      // - Tilt muss nach vollständigem Laden der Karte gesetzt werden
+      // - Sonst wird 3D-Ansicht nicht korrekt aktiviert
       google.maps.event.addListenerOnce(map, 'tilesloaded', () => {
-        map.setTilt(45);
+        map.setTilt(GOOGLE_MAPS_CONFIG.TILT);
       });
     };
 
@@ -547,7 +682,7 @@ export default function GardenMap({ selectedGarden, osmGeometry, allGardens, ava
     <div ref={mapWrapperRef} className="w-full flex-1 min-h-[350px] flex flex-col rounded-lg overflow-hidden border border-scholle-border relative">
       {/* Map Type Toggle - Nur anzeigen wenn Umschalten möglich ist */}
       {!disable3D && (
-        <div className="absolute top-2 right-2 z-[1001] bg-scholle-bg-container rounded-lg shadow-lg p-1 flex gap-1 border border-scholle-border">
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[1001] bg-scholle-bg-container rounded-lg shadow-lg p-1 flex gap-1 border border-scholle-border">
           <button
             onClick={() => setMapType('osm')}
             className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
@@ -586,12 +721,14 @@ export default function GardenMap({ selectedGarden, osmGeometry, allGardens, ava
         </>
       ) : (
       <MapContainer
-        center={initialCenter}
-        zoom={initialZoom}
+        center={INITIAL_MAP_CENTER}
+        zoom={INITIAL_MAP_ZOOM}
         style={{ height: '100%', width: '100%', minHeight: '350px', flex: '1 1 0%' }}
         scrollWheelZoom={true}
         maxZoom={mapType === 'satellite' ? 22 : 19}
-        minZoom={10}
+        minZoom={13}
+        maxBounds={osnabrueckLeafletBounds}
+        maxBoundsViscosity={1.0}
         key={`map-${mapType}`}
       >
         {mapType === 'osm' ? (
@@ -599,7 +736,7 @@ export default function GardenMap({ selectedGarden, osmGeometry, allGardens, ava
             <TileLayer
               key="osm"
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              url="https://{s}.tile.openstreetmap.de/{z}/{x}/{y}.png"
               maxZoom={19}
             />
           ) : (
@@ -646,34 +783,26 @@ export default function GardenMap({ selectedGarden, osmGeometry, allGardens, ava
             )}
           </>
         )}
-        <MapController garden={selectedGarden} osmGeometry={osmGeometry} />
+        {/* Controller für ausgewählten Garten */}
+        {selectedGarden && <MapController garden={selectedGarden} osmGeometry={osmGeometry} />}
+        
+        {/* Controller für alle Gärten auf der Startseite */}
+        {!selectedGarden && allGardens.length > 0 && (
+          <AllGardensMapController allGardens={allGardens} />
+        )}
+        
         <ZoomWatcher onZoomChange={setCurrentZoom} />
         <MapSizeUpdater />
         
-        {/* Zeige alle Gärten an */}
-        {allGardens.map((garden) => {
-          const isSelected = !!(selectedGarden && selectedGarden.number === garden.tags.name);
-          // Prüfe ob der Garten ein freier Garten ist
-          const isAvailable = availableGardens.some(g => g.number === garden.tags.name);
-          return (
-            <GardenPolygon
-              key={garden.id}
-              garden={garden}
-              isSelected={isSelected}
-              showLabels={showLabels}
-              onGardenClick={onGardenClick}
-              mapType={mapType}
-              isAvailable={isAvailable}
-              hoveredGardenNumber={hoveredGardenNumber}
-              onGardenHover={onGardenHover}
-            />
-          );
-        })}
+        {/* Zeige alle Gärten an, aber nur gefilterte als verfügbar markieren */}
+        {gardenPolygons}
         
         {/* Zeige ausgewählten Garten als Polygon wenn osmGeometry vorhanden ist (auch wenn nicht in allGardens) */}
         {selectedGarden && osmGeometry && osmGeometry.length > 0 && (() => {
           const gardenNumber = selectedGarden.number;
           const isSatellite = mapType === 'satellite';
+          const isAvailable = availableGardens.some(g => g.number === gardenNumber);
+          const isHovered = hoveredGardenNumber === gardenNumber;
           return (
             <Polygon
               positions={osmGeometryToLeafletCoords(osmGeometry)}
@@ -683,23 +812,35 @@ export default function GardenMap({ selectedGarden, osmGeometry, allGardens, ava
                 fillOpacity: isSatellite ? 0 : 0.3,
                 weight: 2,
               }}
-              eventHandlers={{
+              eventHandlers={!isSatellite ? {
                 click: () => onGardenClick(gardenNumber),
-              }}
+                mouseover: () => onGardenHover?.(gardenNumber),
+                mouseout: () => onGardenHover?.(null),
+              } : {}}
             >
               {showLabels && (
                 <Tooltip
                   permanent
                   direction="center"
-                  className="garden-label-tooltip garden-label-clickable"
+                  className={`garden-label-tooltip garden-label-clickable ${isAvailable ? 'garden-label-available' : ''}`}
                   opacity={1}
                 >
                   <span 
-                    className="font-semibold cursor-pointer hover:underline text-scholle-green-dark"
-                    onClick={(e) => {
+                    className={`font-semibold transition-all ${
+                      !isSatellite ? 'cursor-pointer' : 'cursor-default'
+                    } ${
+                      isAvailable 
+                        ? isHovered 
+                          ? 'text-white bg-scholle-green-dark text-lg px-2 py-1 rounded' 
+                          : 'text-white bg-scholle-green hover:bg-scholle-green-dark hover:text-lg px-2 py-1 rounded'
+                        : 'text-scholle-green-dark'
+                    }`}
+                    onClick={!isSatellite ? (e) => {
                       e.stopPropagation();
                       onGardenClick(gardenNumber);
-                    }}
+                    } : undefined}
+                    onMouseEnter={!isSatellite ? () => onGardenHover?.(gardenNumber) : undefined}
+                    onMouseLeave={!isSatellite ? () => onGardenHover?.(null) : undefined}
                   >
                     {gardenNumber}
                   </span>
@@ -709,46 +850,40 @@ export default function GardenMap({ selectedGarden, osmGeometry, allGardens, ava
           );
         })()}
         
-        {/* Marker nur in Kartenansicht, nicht in Satellitenansicht */}
-        {selectedGarden && selectedGarden.coordinates && mapType === 'osm' && (
-          <Marker position={selectedGarden.coordinates} />
-        )}
-        
-        {/* Marker für freie Gärten - nur wenn in OSM gefunden und Labels NICHT sichtbar */}
-        {mapType === 'osm' && !showLabels && availableGardens.map((garden) => {
-          // Prüfe ob der Garten in OSM gefunden wurde (nur nach Name suchen)
-          const osmGarden = allGardens.find(
-            osm => osm.tags.name === garden.number
-          );
-          
-          // Nur anzeigen wenn in OSM gefunden und Geometrie vorhanden
-          if (!osmGarden || !osmGarden.geometry || osmGarden.geometry.length === 0) {
-            return null;
-          }
+        {/* Marker für ausgewählten Garten - nur wenn Labels NICHT sichtbar und in OSM-Karte */}
+        {selectedGarden && osmGeometry && osmGeometry.length > 0 && mapType === 'osm' && !showLabels && (() => {
+          const gardenNumber = selectedGarden.number;
+          const isAvailable = availableGardens.some(g => g.number === gardenNumber);
+          const isHovered = hoveredGardenNumber === gardenNumber;
           
           // Berechne Zentrum der Geometrie
-          const centerLat = osmGarden.geometry.reduce((sum, p) => sum + p.lat, 0) / osmGarden.geometry.length;
-          const centerLon = osmGarden.geometry.reduce((sum, p) => sum + p.lon, 0) / osmGarden.geometry.length;
+          const center = calculateGeometryCenter(osmGeometry);
+          if (!center) return null;
           
-          const isHovered = hoveredGardenNumber === garden.number;
-          
-          return (
-            <Marker
-              key={`available-${garden.id}`}
-              position={[centerLat, centerLon]}
-              icon={isHovered ? HighlightedIcon : GreenIcon}
-              eventHandlers={{
-                click: () => onGardenClick(garden.number),
-                mouseover: () => onGardenHover?.(garden.number),
-                mouseout: () => onGardenHover?.(null),
-              }}
-            >
-              <Tooltip permanent={false}>
-                Garten {garden.number}
-              </Tooltip>
-            </Marker>
-          );
-        })}
+          // Nur grünen Marker anzeigen wenn verfügbar
+          if (isAvailable) {
+            return (
+              <Marker
+                key={`selected-${selectedGarden.id}`}
+                position={[center.lat, center.lon]}
+                icon={isHovered ? HighlightedIcon : GreenIcon}
+                eventHandlers={{
+                  click: () => onGardenClick(gardenNumber),
+                  mouseover: () => onGardenHover?.(gardenNumber),
+                  mouseout: () => onGardenHover?.(null),
+                }}
+              >
+                <Tooltip permanent={false}>
+                  Garten {gardenNumber}
+                </Tooltip>
+              </Marker>
+            );
+          }
+          return null;
+        })()}
+        
+        {/* Marker für gefilterte Gärten - nur wenn in OSM gefunden und Labels NICHT sichtbar */}
+        {availableMarkers}
       </MapContainer>
       )}
     </div>
