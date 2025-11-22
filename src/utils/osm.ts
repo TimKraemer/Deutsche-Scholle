@@ -335,19 +335,56 @@ export async function findEnclosingParcel(gardenWay: OSMWay): Promise<string | n
         })
         .map(({ element, area }) => ({ element, area }));
 
-      // Sortiere nach Fläche (größte zuerst) - größere Parzellen haben Vorrang
-      filteredElements.sort((a, b) => b.area - a.area);
+      // Priorisiere spezifische Parzellen (allotments=plot mit Namen) über Vereinsflächen (landuse=allotments)
+      // Sortiere: Zuerst spezifische Parzellen (allotments=plot), dann Vereinsflächen (landuse=allotments)
+      filteredElements.sort((a, b) => {
+        const aIsParcel = a.element.tags?.allotments === 'plot' && a.element.tags?.name;
+        const bIsParcel = b.element.tags?.allotments === 'plot' && b.element.tags?.name;
+        const aIsVerein = a.element.tags?.landuse === 'allotments';
+        const bIsVerein = b.element.tags?.landuse === 'allotments';
+        
+        // Spezifische Parzellen haben höchste Priorität
+        if (aIsParcel && !bIsParcel) return -1;
+        if (!aIsParcel && bIsParcel) return 1;
+        
+        // Vereinsflächen haben niedrigste Priorität
+        if (aIsVerein && !bIsVerein) return 1;
+        if (!aIsVerein && bIsVerein) return -1;
+        
+        // Ansonsten nach Fläche sortieren (kleinere Parzellen zuerst, da spezifischer)
+        return a.area - b.area;
+      });
 
       // Finde die Parzelle, die den Garten umschließt
       // Prüfe ob der Garten innerhalb der Parzelle liegt
+      // WICHTIG: Durch die Sortierung werden spezifische Parzellen (allotments=plot) zuerst geprüft,
+      // Vereinsflächen (landuse=allotments) kommen zuletzt
+      let vereinFallback: { element: any; name: string } | null = null;
+      
       for (const { element } of filteredElements) {
         if (element.geometry && element.geometry.length > 0) {
           const isInside = isPointInPolygon(gardenCenter, element.geometry);
           
           if (isInside) {
-            return element.tags.name || null;
+            const isVerein = element.tags?.landuse === 'allotments';
+            
+            // Wenn es eine Vereinsfläche ist, merke sie als Fallback, aber suche weiter
+            if (isVerein && element.tags?.name) {
+              vereinFallback = { element, name: element.tags.name };
+              continue; // Suche weiter nach spezifischeren Parzellen
+            }
+            
+            // Spezifische Parzelle oder andere Parzellen-Typen gefunden - gib sie zurück
+            if (element.tags?.name) {
+              return element.tags.name;
+            }
           }
         }
+      }
+      
+      // Fallback: Wenn keine spezifische Parzelle gefunden wurde, verwende Vereinsfläche
+      if (vereinFallback) {
+        return vereinFallback.name;
       }
       
       // Fallback: Wenn keine gefilterte Parzelle gefunden wurde, suche nach größtem Polygon
