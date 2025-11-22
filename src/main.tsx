@@ -4,12 +4,14 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
 import GardenPage from './pages/GardenPage.tsx'
+import DebugPage from './pages/DebugPage.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<App />} />
+        <Route path="/debug" element={<DebugPage />} />
         <Route path="/:gardenNumber" element={<GardenPage />} />
       </Routes>
     </BrowserRouter>
