@@ -1,17 +1,31 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import GardenMap from '../components/GardenMap';
-import GardenDetails from '../components/GardenDetails';
-import CookieConsent from '../components/CookieConsent';
-import type { CookieConsentRef } from '../components/CookieConsent';
-import type { Garden } from '../types/garden';
-import { findGardenByNumber, mockGardens } from '../data/mockGardens';
-import { searchGardenByNumber, osmWayToGarden, loadAllGardensWithUpdate, findEnclosingParcel } from '../utils/osm';
-import type { OSMWay } from '../utils/osm';
-import { filterAvailableGardens, sortGardens, type SortOption, type SortDirection } from '../utils/gardenSort';
-import type { CookiePreferences } from '../types/cookies';
-import { loadCookiePreferences } from '../utils/cookies';
-import { applyGardenFilters, loadFiltersFromStorage, hasActiveFilters } from '../utils/gardenFilters';
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import type { CookieConsentRef } from "../components/CookieConsent";
+import CookieConsent from "../components/CookieConsent";
+import GardenDetails from "../components/GardenDetails";
+import GardenMap from "../components/GardenMap";
+import { findGardenByNumber, mockGardens } from "../data/mockGardens";
+import type { CookiePreferences } from "../types/cookies";
+import type { Garden } from "../types/garden";
+import { loadCookiePreferences } from "../utils/cookies";
+import {
+  applyGardenFilters,
+  hasActiveFilters,
+  loadFiltersFromStorage,
+} from "../utils/gardenFilters";
+import {
+  filterAvailableGardens,
+  type SortDirection,
+  type SortOption,
+  sortGardens,
+} from "../utils/gardenSort";
+import type { OSMWay } from "../utils/osm";
+import {
+  findEnclosingParcel,
+  loadAllGardensWithUpdate,
+  osmWayToGarden,
+  searchGardenByNumber,
+} from "../utils/osm";
 
 export default function GardenPage() {
   const { gardenNumber } = useParams<{ gardenNumber: string }>();
@@ -29,15 +43,16 @@ export default function GardenPage() {
     openStreetMap: false,
   });
   // Lade Sortierung aus localStorage (synchronisiert mit Startseite)
+  // Standardmäßig nach Nummer sortieren wenn keine gültige Einstellung gespeichert ist
   const [sortBy] = useState<SortOption>(() => {
-    const saved = localStorage.getItem('gardenSortBy');
-    const validOptions: SortOption[] = ['number', 'availableFrom', 'size', 'valuation'];
-    return validOptions.includes(saved as SortOption) ? (saved as SortOption) : 'number';
+    const saved = localStorage.getItem("gardenSortBy");
+    const validOptions: SortOption[] = ["number", "availableFrom", "size", "valuation"];
+    return validOptions.includes(saved as SortOption) ? (saved as SortOption) : "number";
   });
-  
+
   const [sortDirection] = useState<SortDirection>(() => {
-    const saved = localStorage.getItem('gardenSortDirection');
-    return (saved === 'asc' || saved === 'desc') ? saved : 'asc';
+    const saved = localStorage.getItem("gardenSortDirection");
+    return saved === "asc" || saved === "desc" ? saved : "asc";
   });
   const cookieConsentRef = useRef<CookieConsentRef>(null);
 
@@ -46,7 +61,7 @@ export default function GardenPage() {
   const { availableGardens, ranges, activeFilters } = useMemo(() => {
     // Schritt 1: Filtere verfügbare Gärten (availableFrom gesetzt)
     const available = filterAvailableGardens(mockGardens);
-    
+
     if (available.length === 0) {
       // Fallback wenn keine verfügbaren Gärten
       const defaultRanges = {
@@ -71,16 +86,16 @@ export default function GardenPage() {
         activeFilters: filters,
       };
     }
-    
+
     // Schritt 2: Berechne echte Min/Max-Werte aus der Datenbank
-    const prices = available.map(g => g.valuation).filter(p => p >= 0);
-    const sizes = available.map(g => g.size).filter(s => s > 0);
-    
+    const prices = available.map((g) => g.valuation).filter((p) => p >= 0);
+    const sizes = available.map((g) => g.size).filter((s) => s > 0);
+
     const realMinPrice = Math.min(...prices, 0);
     const realMaxPrice = Math.max(...prices, 0);
     const realMinSize = Math.min(...sizes);
     const realMaxSize = Math.max(...sizes);
-    
+
     // Schritt 3: Berechne gerundete Werte für Initialisierung
     // WICHTIG: Gerundete Werte dürfen nicht über die echten Maximalwerte hinausgehen
     // und nicht unter die echten Minimalwerte fallen
@@ -88,7 +103,7 @@ export default function GardenPage() {
     const defaultMaxPrice = Math.min(Math.ceil(realMaxPrice / 50) * 50, realMaxPrice); // Begrenze auf echten Maximalwert
     const defaultMinSize = Math.max(Math.floor(realMinSize / 10) * 10, realMinSize); // Begrenze auf echten Minimalwert
     const defaultMaxSize = Math.min(Math.ceil(realMaxSize / 10) * 10, realMaxSize); // Begrenze auf echten Maximalwert
-    
+
     const calculatedRanges = {
       // Echte Min/Max-Werte für Slider-Grenzen (exakt aus der Datenbank)
       minPrice: Math.max(0, realMinPrice),
@@ -101,7 +116,7 @@ export default function GardenPage() {
       defaultMinSize: defaultMinSize, // Bereits auf echten Minimalwert begrenzt
       defaultMaxSize: defaultMaxSize, // Bereits auf echten Maximalwert begrenzt
     };
-    
+
     // Schritt 4: Lade aktive Filter aus localStorage (synchronisiert mit Startseite)
     const filters = loadFiltersFromStorage({
       minPrice: calculatedRanges.defaultMinPrice,
@@ -109,13 +124,13 @@ export default function GardenPage() {
       minSize: calculatedRanges.defaultMinSize,
       maxSize: calculatedRanges.defaultMaxSize,
     });
-    
+
     // Schritt 5: Wende Filter an (nur gefilterte Gärten werden beim Durchblättern berücksichtigt)
     const filtered = applyGardenFilters(available, filters);
-    
+
     // Schritt 6: Sortiere nach ausgewählter Option und Richtung
     const sorted = sortGardens(filtered, sortBy, sortDirection);
-    
+
     return {
       availableGardens: sorted,
       ranges: calculatedRanges,
@@ -124,28 +139,30 @@ export default function GardenPage() {
   }, [sortBy, sortDirection]);
 
   // Prüfe ob Filter aktiv sind (vergleiche mit gerundeten Standard-Werten)
-  const filtersActive = useMemo(() => 
-    hasActiveFilters(activeFilters, {
-      minPrice: ranges.defaultMinPrice,
-      maxPrice: ranges.defaultMaxPrice,
-      minSize: ranges.defaultMinSize,
-      maxSize: ranges.defaultMaxSize,
-    }),
+  const filtersActive = useMemo(
+    () =>
+      hasActiveFilters(activeFilters, {
+        minPrice: ranges.defaultMinPrice,
+        maxPrice: ranges.defaultMaxPrice,
+        minSize: ranges.defaultMinSize,
+        maxSize: ranges.defaultMaxSize,
+      }),
     [activeFilters, ranges]
   );
 
   // Finde aktuellen Index in der gefilterten und sortierten Liste
   const currentIndex = useMemo(() => {
     if (!gardenNumber || !selectedGarden) return -1;
-    return availableGardens.findIndex(g => g.number === gardenNumber);
+    return availableGardens.findIndex((g) => g.number === gardenNumber);
   }, [gardenNumber, selectedGarden, availableGardens]);
 
   // Berechne vorherigen und nächsten Garten aus der gefilterten Liste
   // WICHTIG: Nur Gärten die den aktiven Filtern entsprechen werden beim Durchblättern angezeigt
   const previousGarden = currentIndex > 0 ? availableGardens[currentIndex - 1] : null;
-  const nextGarden = currentIndex >= 0 && currentIndex < availableGardens.length - 1 
-    ? availableGardens[currentIndex + 1] 
-    : null;
+  const nextGarden =
+    currentIndex >= 0 && currentIndex < availableGardens.length - 1
+      ? availableGardens[currentIndex + 1]
+      : null;
 
   // Lade initiale Cookie-Präferenzen beim Start
   useEffect(() => {
@@ -153,35 +170,38 @@ export default function GardenPage() {
     setCookiePreferences(preferences);
   }, []);
 
-  const handleConsentChange = (preferences: { googleMaps: boolean | null; openStreetMap: boolean | null }) => {
+  const handleConsentChange = (preferences: {
+    googleMaps: boolean | null;
+    openStreetMap: boolean | null;
+  }) => {
     setCookiePreferences({
       googleMaps: preferences.googleMaps === true,
       openStreetMap: preferences.openStreetMap === true,
     });
   };
 
-    // Lade alle Gärten nur wenn OSM-Zustimmung gegeben wurde
-    useEffect(() => {
-      if (!cookiePreferences.openStreetMap) {
-        return;
-      }
+  // Lade alle Gärten nur wenn OSM-Zustimmung gegeben wurde
+  useEffect(() => {
+    if (!cookiePreferences.openStreetMap) {
+      return;
+    }
 
-      // Hybrid-Ansatz: Zeige sofort gecachte Daten, aktualisiere im Hintergrund
-      const cachedGardens = loadAllGardensWithUpdate((updatedGardens) => {
-        // Callback wird aufgerufen wenn neue Daten verfügbar sind
-        setAllGardens(updatedGardens);
-      });
-      
-      // Setze sofort gecachte Daten (falls vorhanden)
-      if (cachedGardens.length > 0) {
-        setAllGardens(cachedGardens);
-      }
-    }, [cookiePreferences.openStreetMap]);
+    // Hybrid-Ansatz: Zeige sofort gecachte Daten, aktualisiere im Hintergrund
+    const cachedGardens = loadAllGardensWithUpdate((updatedGardens) => {
+      // Callback wird aufgerufen wenn neue Daten verfügbar sind
+      setAllGardens(updatedGardens);
+    });
+
+    // Setze sofort gecachte Daten (falls vorhanden)
+    if (cachedGardens.length > 0) {
+      setAllGardens(cachedGardens);
+    }
+  }, [cookiePreferences.openStreetMap]);
 
   // Lade Garten basierend auf URL-Parameter
   useEffect(() => {
     if (!gardenNumber) {
-      navigate('/');
+      navigate("/");
       return;
     }
 
@@ -195,22 +215,22 @@ export default function GardenPage() {
       try {
         // Zuerst in Mock-Daten suchen
         const mockGarden = findGardenByNumber(gardenNumber);
-        
+
         // Dann in OpenStreetMap suchen (nur wenn Zustimmung gegeben)
-        const osmWay = cookiePreferences.openStreetMap 
+        const osmWay = cookiePreferences.openStreetMap
           ? await searchGardenByNumber(gardenNumber)
           : null;
-        
+
         if (osmWay) {
           // Suche nach umschließender Parzelle
           const enclosingParcel = await findEnclosingParcel(osmWay);
           setOsmParcel(enclosingParcel);
-          
+
           // OSM-Größe wird später aus dem Garden-Objekt extrahiert
-          
+
           // Kombiniere OSM-Daten mit Mock-Daten
           const garden = osmWayToGarden(osmWay, mockGarden, enclosingParcel);
-          
+
           if (garden) {
             setSelectedGarden(garden);
             setOsmSize(garden.osmSize);
@@ -219,7 +239,7 @@ export default function GardenPage() {
               setHasOsmData(true);
             }
           } else {
-            setError('Garten gefunden, aber Geometrie konnte nicht verarbeitet werden.');
+            setError("Garten gefunden, aber Geometrie konnte nicht verarbeitet werden.");
           }
         } else if (mockGarden) {
           // Garten in DB, aber nicht in OSM gefunden
@@ -230,14 +250,16 @@ export default function GardenPage() {
           // Garten weder in Mock-Daten noch in OSM gefunden
           // Aber wenn OSM-Zustimmung nicht gegeben ist, könnte der Garten trotzdem existieren
           if (!cookiePreferences.openStreetMap) {
-            setError(`Garten mit Nummer "${gardenNumber}" nicht gefunden. Bitte aktivieren Sie OpenStreetMap in den Cookie-Einstellungen, um auch Gärten zu finden, die nur in OSM vorhanden sind.`);
+            setError(
+              `Garten mit Nummer "${gardenNumber}" nicht gefunden. Bitte aktivieren Sie OpenStreetMap in den Cookie-Einstellungen, um auch Gärten zu finden, die nur in OSM vorhanden sind.`
+            );
           } else {
             setError(`Garten mit Nummer "${gardenNumber}" nicht gefunden.`);
           }
         }
       } catch (err) {
-        console.error('Search error:', err);
-        setError('Fehler bei der Suche. Bitte versuchen Sie es erneut.');
+        console.error("Search error:", err);
+        setError("Fehler bei der Suche. Bitte versuchen Sie es erneut.");
       } finally {
         setIsLoading(false);
       }
@@ -269,7 +291,7 @@ export default function GardenPage() {
           <header className="mb-4">
             <div className="flex items-center gap-4 mb-1">
               <button
-                onClick={() => navigate('/')}
+                onClick={() => navigate("/")}
                 className="text-sm text-scholle-blue hover:text-scholle-blue-dark transition-colors font-medium"
               >
                 ← Zurück zur Übersicht
@@ -294,8 +316,8 @@ export default function GardenPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:flex-1 lg:min-h-0 lg:overflow-hidden">
             <div className="lg:col-span-2 flex flex-col lg:min-h-0 lg:overflow-hidden">
               {hasOsmData && osmGeometry ? (
-                <GardenMap 
-                  selectedGarden={selectedGarden} 
+                <GardenMap
+                  selectedGarden={selectedGarden}
                   osmGeometry={osmGeometry}
                   allGardens={allGardens}
                   availableGardens={availableGardens}
@@ -310,8 +332,18 @@ export default function GardenPage() {
                   <div className="bg-scholle-bg-container rounded-lg border border-scholle-border shadow-sm p-6 max-w-2xl w-full">
                     <div className="flex items-start gap-4">
                       <div className="flex-shrink-0">
-                        <svg className="h-6 w-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <svg
+                          className="h-6 w-6 text-yellow-600"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
                         </svg>
                       </div>
                       <div className="flex-1">
@@ -319,16 +351,16 @@ export default function GardenPage() {
                           Kartenansicht nicht verfügbar
                         </h3>
                         <p className="text-base text-scholle-text-light">
-                          Die exakte Position von Garten {gardenNumber} wurde noch nicht auf der Karte eingezeichnet. 
-                          Die Gartendetails können Sie rechts einsehen.
+                          Die exakte Position von Garten {gardenNumber} wurde noch nicht auf der
+                          Karte eingezeichnet. Die Gartendetails können Sie rechts einsehen.
                         </p>
                       </div>
                     </div>
                   </div>
                 </div>
               ) : (
-                <GardenMap 
-                  selectedGarden={selectedGarden} 
+                <GardenMap
+                  selectedGarden={selectedGarden}
                   osmGeometry={osmGeometry}
                   allGardens={allGardens}
                   availableGardens={availableGardens}
@@ -340,7 +372,7 @@ export default function GardenPage() {
                 />
               )}
             </div>
-            
+
             <div className="lg:col-span-1 flex-shrink-0 relative z-10 flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
               {/* Navigation zu vorherigem/nächstem Garten */}
               {/* WICHTIG: Beim Durchblättern werden nur Gärten angezeigt, die den aktiven Filtern entsprechen */}
@@ -351,17 +383,24 @@ export default function GardenPage() {
                     disabled={!previousGarden}
                     className={`flex items-center gap-2 px-3 py-2 rounded transition-colors ${
                       previousGarden
-                        ? 'bg-scholle-green text-white hover:bg-scholle-green/90'
-                        : 'bg-scholle-border text-scholle-text-light cursor-not-allowed'
+                        ? "bg-scholle-green text-white hover:bg-scholle-green/90"
+                        : "bg-scholle-border text-scholle-text-light cursor-not-allowed"
                     }`}
-                    title={previousGarden ? `Vorheriger Garten: ${previousGarden.number}` : undefined}
+                    title={
+                      previousGarden ? `Vorheriger Garten: ${previousGarden.number}` : undefined
+                    }
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 19l-7-7 7-7"
+                      />
                     </svg>
                     <span className="text-sm font-medium">Vorheriger</span>
                   </button>
-                  
+
                   <div className="flex-1 text-center text-xs text-scholle-text-light">
                     {currentIndex + 1} von {availableGardens.length}
                     {filtersActive && (
@@ -370,27 +409,32 @@ export default function GardenPage() {
                       </span>
                     )}
                   </div>
-                  
+
                   <button
                     onClick={() => nextGarden && navigate(`/${nextGarden.number}`)}
                     disabled={!nextGarden}
                     className={`flex items-center gap-2 px-3 py-2 rounded transition-colors ${
                       nextGarden
-                        ? 'bg-scholle-green text-white hover:bg-scholle-green/90'
-                        : 'bg-scholle-border text-scholle-text-light cursor-not-allowed'
+                        ? "bg-scholle-green text-white hover:bg-scholle-green/90"
+                        : "bg-scholle-border text-scholle-text-light cursor-not-allowed"
                     }`}
                     title={nextGarden ? `Nächster Garten: ${nextGarden.number}` : undefined}
                   >
                     <span className="text-sm font-medium">Nächster</span>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
                     </svg>
                   </button>
                 </div>
               )}
-              
-              <GardenDetails 
-                garden={selectedGarden} 
+
+              <GardenDetails
+                garden={selectedGarden}
                 osmGeometry={osmGeometry}
                 gardenNumber={gardenNumber}
                 osmParcel={osmParcel}
@@ -399,19 +443,21 @@ export default function GardenPage() {
             </div>
           </div>
         </div>
-        
+
         {/* Footer mit Hinweis zu Fehlern */}
         <div className="flex-shrink-0 border-t border-scholle-border bg-scholle-bg-light px-4 py-2">
           <p className="text-xs text-scholle-text-light text-center">
-            Fehler in der Karte? Bitte melden Sie diese an{' '}
-            <a href="mailto:scholle-map@tk22.de" className="text-scholle-blue hover:text-scholle-blue-dark underline">
+            Fehler in der Karte? Bitte melden Sie diese an{" "}
+            <a
+              href="mailto:scholle-map@tk22.de"
+              className="text-scholle-blue hover:text-scholle-blue-dark underline"
+            >
               scholle-map@tk22.de
-            </a>
-            {' '}oder direkt beim Verein.
+            </a>{" "}
+            oder direkt beim Verein.
           </p>
         </div>
       </div>
     </>
   );
 }
-

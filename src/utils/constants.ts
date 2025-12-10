@@ -5,8 +5,8 @@
 // Osnabrück city bounds for map restrictions
 export const OSNABRUECK_BOUNDS = {
   north: 52.32,
-  south: 52.20,
-  east: 8.10,
+  south: 52.2,
+  east: 8.1,
   west: 7.95,
 } as const;
 
@@ -25,4 +25,3 @@ export const GOOGLE_MAPS_CONFIG = {
   DEFAULT_ZOOM: 15,
   GARDEN_ZOOM: 18,
 } as const;
-

@@ -3,7 +3,7 @@
  * Speichert Daten in localStorage mit TTL (Time To Live)
  */
 
-const CACHE_PREFIX = 'osm_cache_';
+const CACHE_PREFIX = "osm_cache_";
 const DEFAULT_TTL = 24 * 60 * 60 * 1000; // 24 Stunden in Millisekunden
 
 interface CacheEntry<T> {
@@ -18,7 +18,7 @@ interface CacheEntry<T> {
 function isCacheValid<T>(entry: CacheEntry<T> | null): entry is CacheEntry<T> {
   if (!entry) return false;
   const now = Date.now();
-  return (now - entry.timestamp) < entry.ttl;
+  return now - entry.timestamp < entry.ttl;
 }
 
 /**
@@ -30,7 +30,7 @@ export function getFromCache<T>(key: string): T | null {
     if (!cached) return null;
 
     const entry: CacheEntry<T> = JSON.parse(cached);
-    
+
     if (isCacheValid(entry)) {
       return entry.data;
     } else {
@@ -39,7 +39,7 @@ export function getFromCache<T>(key: string): T | null {
       return null;
     }
   } catch (error) {
-    console.error('Error reading from cache:', error);
+    console.error("Error reading from cache:", error);
     return null;
   }
 }
@@ -56,20 +56,23 @@ export function setCache<T>(key: string, data: T, ttl: number = DEFAULT_TTL): vo
     };
     localStorage.setItem(`${CACHE_PREFIX}${key}`, JSON.stringify(entry));
   } catch (error) {
-    console.error('Error writing to cache:', error);
+    console.error("Error writing to cache:", error);
     // Wenn localStorage voll ist, versuche alte Einträge zu löschen
     // Warum?
     // - localStorage hat begrenzten Speicherplatz (~5-10MB)
     // - Automatische Bereinigung ermöglicht weitere Nutzung ohne Fehler
     try {
       clearExpiredCache();
-      localStorage.setItem(`${CACHE_PREFIX}${key}`, JSON.stringify({
-        data,
-        timestamp: Date.now(),
-        ttl,
-      }));
+      localStorage.setItem(
+        `${CACHE_PREFIX}${key}`,
+        JSON.stringify({
+          data,
+          timestamp: Date.now(),
+          ttl,
+        })
+      );
     } catch (e) {
-      console.error('Cache full, could not save:', e);
+      console.error("Cache full, could not save:", e);
     }
   }
 }
@@ -97,7 +100,7 @@ function clearExpiredCache(): void {
       }
     }
   } catch (error) {
-    console.error('Error clearing expired cache:', error);
+    console.error("Error clearing expired cache:", error);
   }
 }
 
@@ -113,7 +116,7 @@ export function clearCache(): void {
       }
     }
   } catch (error) {
-    console.error('Error clearing cache:', error);
+    console.error("Error clearing cache:", error);
   }
 }
 
@@ -121,7 +124,6 @@ export function clearCache(): void {
  * Cache-Keys
  */
 export const CacheKeys = {
-  ALL_GARDENS: 'all_gardens',
+  ALL_GARDENS: "all_gardens",
   GARDEN: (number: string) => `garden_${number}`,
 } as const;
-

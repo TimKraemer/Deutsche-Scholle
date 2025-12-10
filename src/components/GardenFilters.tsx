@@ -1,8 +1,13 @@
-import { useState, useEffect, useMemo } from 'react';
-import type { Garden } from '../types/garden';
-import { Slider, Checkbox, FormControlLabel } from '@mui/material';
-import { formatCurrency } from '../utils/formatting';
-import { applyGardenFilters, loadFiltersFromStorage, saveFiltersToStorage, type FilterValues } from '../utils/gardenFilters';
+import { Checkbox, FormControlLabel, Slider } from "@mui/material";
+import { useEffect, useMemo, useState } from "react";
+import type { Garden } from "../types/garden";
+import { formatCurrency } from "../utils/formatting";
+import {
+  applyGardenFilters,
+  type FilterValues,
+  loadFiltersFromStorage,
+  saveFiltersToStorage,
+} from "../utils/gardenFilters";
 
 interface GardenFiltersProps {
   gardens: Garden[];
@@ -10,12 +15,11 @@ interface GardenFiltersProps {
   onFilterActiveChange?: (isActive: boolean) => void;
 }
 
-
 /**
  * Berechne Min/Max Werte aus den Daten für Filter-Slider
- * 
+ *
  * Gibt sowohl echte Min/Max-Werte (für Slider-Grenzen) als auch gerundete Werte (für Initialisierung) zurück
- * 
+ *
  * Warum zwei Sets von Werten?
  * - Echte Min/Max: Slider-Grenzen entsprechen exakt den Datenbank-Werten
  * - Gerundete Werte: Initialisierung der Filter auf sinnvolle Schritte (50€/10m²) für bessere UX
@@ -36,8 +40,8 @@ const calculateRanges = (gardens: Garden[]) => {
     };
   }
 
-  const prices = gardens.map(g => g.valuation).filter(p => p >= 0);
-  const sizes = gardens.map(g => g.size).filter(s => s > 0);
+  const prices = gardens.map((g) => g.valuation).filter((p) => p >= 0);
+  const sizes = gardens.map((g) => g.size).filter((s) => s > 0);
 
   // Echte Min/Max-Werte aus der Datenbank (für Slider-Grenzen)
   const realMinPrice = Math.min(...prices, 0);
@@ -67,9 +71,13 @@ const calculateRanges = (gardens: Garden[]) => {
   };
 };
 
-export default function GardenFilters({ gardens, onFilterChange, onFilterActiveChange }: GardenFiltersProps) {
+export default function GardenFilters({
+  gardens,
+  onFilterChange,
+  onFilterActiveChange,
+}: GardenFiltersProps) {
   const ranges = useMemo(() => calculateRanges(gardens), [gardens]);
-  
+
   // Lade Filter-Werte aus localStorage oder verwende gerundete Standard-Werte
   const [filters, setFilters] = useState<FilterValues>(() => {
     const loaded = loadFiltersFromStorage({
@@ -87,10 +95,10 @@ export default function GardenFilters({ gardens, onFilterChange, onFilterActiveC
       onlyAvailableNow: loaded.onlyAvailableNow,
     };
   });
-  
+
   // Update filter ranges when gardens change
   useEffect(() => {
-    setFilters(prev => ({
+    setFilters((prev) => ({
       ...prev,
       minPrice: Math.max(ranges.minPrice, Math.min(ranges.maxPrice, prev.minPrice)),
       maxPrice: Math.min(ranges.maxPrice, Math.max(ranges.minPrice, prev.maxPrice)),
@@ -113,8 +121,7 @@ export default function GardenFilters({ gardens, onFilterChange, onFilterActiveC
 
   useEffect(() => {
     onFilterChange(filteredGardens);
-  }, [filteredGardens, onFilterChange]);
-
+  }, [filteredGardens]);
 
   const resetFilters = () => {
     // Beim Zurücksetzen werden gerundete Standard-Werte verwendet (nicht echte Min/Max)
@@ -127,19 +134,20 @@ export default function GardenFilters({ gardens, onFilterChange, onFilterActiveC
     });
   };
 
-  const hasActiveFilters = useMemo(() => 
-    filters.minPrice !== ranges.defaultMinPrice ||
-    filters.maxPrice !== ranges.defaultMaxPrice ||
-    filters.minSize !== ranges.defaultMinSize ||
-    filters.maxSize !== ranges.defaultMaxSize ||
-    filters.onlyAvailableNow,
+  const hasActiveFilters = useMemo(
+    () =>
+      filters.minPrice !== ranges.defaultMinPrice ||
+      filters.maxPrice !== ranges.defaultMaxPrice ||
+      filters.minSize !== ranges.defaultMinSize ||
+      filters.maxSize !== ranges.defaultMaxSize ||
+      filters.onlyAvailableNow,
     [filters, ranges]
   );
 
   // Informiere Parent über Filter-Status
   useEffect(() => {
     onFilterActiveChange?.(hasActiveFilters);
-  }, [hasActiveFilters, onFilterActiveChange]);
+  }, [hasActiveFilters]);
 
   return (
     <div className="bg-scholle-bg-light border-b border-scholle-border">
@@ -148,8 +156,18 @@ export default function GardenFilters({ gardens, onFilterChange, onFilterActiveC
         className="w-full px-4 py-3 flex items-center justify-between hover:bg-scholle-bg-container transition-colors"
       >
         <div className="flex items-center gap-2">
-          <svg className="w-5 h-5 text-scholle-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+          <svg
+            className="w-5 h-5 text-scholle-green"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+            />
           </svg>
           <span className="font-semibold text-scholle-text">Filter</span>
         </div>
@@ -160,7 +178,7 @@ export default function GardenFilters({ gardens, onFilterChange, onFilterActiveC
             </span>
           )}
           <svg
-            className={`w-5 h-5 text-scholle-text-light transition-transform duration-300 ease-in-out ${isExpanded ? 'rotate-180' : ''}`}
+            className={`w-5 h-5 text-scholle-text-light transition-transform duration-300 ease-in-out ${isExpanded ? "rotate-180" : ""}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -172,14 +190,16 @@ export default function GardenFilters({ gardens, onFilterChange, onFilterActiveC
 
       <div
         className={`overflow-hidden transition-all duration-300 ease-in-out relative z-0 ${
-          isExpanded 
-            ? 'max-h-[800px] opacity-100 translate-y-0' 
-            : 'max-h-0 opacity-0 -translate-y-2'
+          isExpanded
+            ? "max-h-[800px] opacity-100 translate-y-0"
+            : "max-h-0 opacity-0 -translate-y-2"
         }`}
       >
-        <div className={`px-4 pb-4 space-y-6 pt-4 mx-2 mb-2 rounded-lg bg-white border-2 border-scholle-green/20 shadow-sm transition-opacity duration-300 ${
-          isExpanded ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}>
+        <div
+          className={`px-4 pb-4 space-y-6 pt-4 mx-2 mb-2 rounded-lg bg-white border-2 border-scholle-green/20 shadow-sm transition-opacity duration-300 ${
+            isExpanded ? "opacity-100" : "opacity-0 pointer-events-none"
+          }`}
+        >
           {/* Preis-Filter */}
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-scholle-text-light mb-2">
@@ -197,22 +217,22 @@ export default function GardenFilters({ gardens, onFilterChange, onFilterActiveC
               valueLabelDisplay="auto"
               valueLabelFormat={(value) => formatCurrency(value)}
               sx={{
-                color: '#6B8F2D', // scholle-green
-                '& .MuiSlider-thumb': {
-                  backgroundColor: '#6B8F2D',
-                  border: '2px solid white',
-                  '&:hover': {
-                    boxShadow: '0 0 0 8px rgba(107, 143, 45, 0.16)',
+                color: "#6B8F2D", // scholle-green
+                "& .MuiSlider-thumb": {
+                  backgroundColor: "#6B8F2D",
+                  border: "2px solid white",
+                  "&:hover": {
+                    boxShadow: "0 0 0 8px rgba(107, 143, 45, 0.16)",
                   },
                 },
-                '& .MuiSlider-track': {
-                  backgroundColor: '#6B8F2D',
+                "& .MuiSlider-track": {
+                  backgroundColor: "#6B8F2D",
                 },
-                '& .MuiSlider-rail': {
-                  backgroundColor: '#E5E7EB', // scholle-border
+                "& .MuiSlider-rail": {
+                  backgroundColor: "#E5E7EB", // scholle-border
                 },
-                '& .MuiSlider-valueLabel': {
-                  backgroundColor: '#6B8F2D',
+                "& .MuiSlider-valueLabel": {
+                  backgroundColor: "#6B8F2D",
                 },
               }}
             />
@@ -239,22 +259,22 @@ export default function GardenFilters({ gardens, onFilterChange, onFilterActiveC
               valueLabelDisplay="auto"
               valueLabelFormat={(value) => `${value} m²`}
               sx={{
-                color: '#6B8F2D', // scholle-green
-                '& .MuiSlider-thumb': {
-                  backgroundColor: '#6B8F2D',
-                  border: '2px solid white',
-                  '&:hover': {
-                    boxShadow: '0 0 0 8px rgba(107, 143, 45, 0.16)',
+                color: "#6B8F2D", // scholle-green
+                "& .MuiSlider-thumb": {
+                  backgroundColor: "#6B8F2D",
+                  border: "2px solid white",
+                  "&:hover": {
+                    boxShadow: "0 0 0 8px rgba(107, 143, 45, 0.16)",
                   },
                 },
-                '& .MuiSlider-track': {
-                  backgroundColor: '#6B8F2D',
+                "& .MuiSlider-track": {
+                  backgroundColor: "#6B8F2D",
                 },
-                '& .MuiSlider-rail': {
-                  backgroundColor: '#E5E7EB', // scholle-border
+                "& .MuiSlider-rail": {
+                  backgroundColor: "#E5E7EB", // scholle-border
                 },
-                '& .MuiSlider-valueLabel': {
-                  backgroundColor: '#6B8F2D',
+                "& .MuiSlider-valueLabel": {
+                  backgroundColor: "#6B8F2D",
                 },
               }}
             />
@@ -271,12 +291,12 @@ export default function GardenFilters({ gardens, onFilterChange, onFilterActiveC
                 checked={filters.onlyAvailableNow}
                 onChange={(e) => setFilters({ ...filters, onlyAvailableNow: e.target.checked })}
                 sx={{
-                  color: '#6B8F2D', // scholle-green
-                  '&.Mui-checked': {
-                    color: '#6B8F2D', // scholle-green
+                  color: "#6B8F2D", // scholle-green
+                  "&.Mui-checked": {
+                    color: "#6B8F2D", // scholle-green
                   },
-                  '&:hover': {
-                    backgroundColor: 'rgba(107, 143, 45, 0.08)',
+                  "&:hover": {
+                    backgroundColor: "rgba(107, 143, 45, 0.08)",
                   },
                 }}
               />
@@ -299,4 +319,3 @@ export default function GardenFilters({ gardens, onFilterChange, onFilterActiveC
     </div>
   );
 }
-

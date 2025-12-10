@@ -1,16 +1,21 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import GardenSearch from './components/GardenSearch';
-import GardenMap from './components/GardenMap';
-import GardenList from './components/GardenList';
-import CookieConsent from './components/CookieConsent';
-import type { CookieConsentRef } from './components/CookieConsent';
-import CookieConsentContent from './components/CookieConsentContent';
-import { loadAllGardens, loadAllGardensWithUpdate, searchGardenByNumber, searchGardenByNumberWithUpdate } from './utils/osm';
-import type { OSMWay } from './utils/osm';
-import { findGardenByNumber, mockGardens } from './data/mockGardens';
-import type { CookiePreferences } from './types/cookies';
-import { loadCookiePreferences } from './utils/cookies';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import type { CookieConsentRef } from "./components/CookieConsent";
+import CookieConsent from "./components/CookieConsent";
+import CookieConsentContent from "./components/CookieConsentContent";
+import GardenList from "./components/GardenList";
+import GardenMap from "./components/GardenMap";
+import GardenSearch from "./components/GardenSearch";
+import { findGardenByNumber, mockGardens } from "./data/mockGardens";
+import type { CookiePreferences } from "./types/cookies";
+import { loadCookiePreferences } from "./utils/cookies";
+import type { OSMWay } from "./utils/osm";
+import {
+  loadAllGardens,
+  loadAllGardensWithUpdate,
+  searchGardenByNumber,
+  searchGardenByNumberWithUpdate,
+} from "./utils/osm";
 
 function App() {
   const navigate = useNavigate();
@@ -24,18 +29,25 @@ function App() {
   const [filteredGardens, setFilteredGardens] = useState<Garden[]>([]);
   const cookieConsentRef = useRef<CookieConsentRef>(null);
 
+  const handleFilteredGardensChange = useCallback((gardens: Garden[]) => {
+    setFilteredGardens(gardens);
+  }, []);
+
   // Lade initiale Cookie-Präferenzen beim Start
   useEffect(() => {
     const preferences = loadCookiePreferences();
     setCookiePreferences(preferences);
   }, []);
 
-  const handleConsentChange = (preferences: { googleMaps: boolean | null; openStreetMap: boolean | null }) => {
-    setCookiePreferences({
-      googleMaps: preferences.googleMaps === true,
-      openStreetMap: preferences.openStreetMap === true,
-    });
-  };
+  const handleConsentChange = useCallback(
+    (preferences: { googleMaps: boolean | null; openStreetMap: boolean | null }) => {
+      setCookiePreferences({
+        googleMaps: preferences.googleMaps === true,
+        openStreetMap: preferences.openStreetMap === true,
+      });
+    },
+    []
+  );
 
   // Lade alle Gärten nur wenn OSM-Zustimmung gegeben wurde
   // Warum Cookie-Check?
@@ -54,38 +66,40 @@ function App() {
       // Callback wird aufgerufen wenn neue Daten verfügbar sind
       setAllGardens(updatedGardens);
     });
-    
+
     // Setze sofort gecachte Daten (falls vorhanden)
     if (cachedGardens.length > 0) {
       setAllGardens(cachedGardens);
     } else {
       // Wenn kein Cache vorhanden, lade sofort (ohne Cache)
       // Fallback für ersten Besuch oder nach Cache-Löschung
-      loadAllGardens(false).then((gardens: OSMWay[]) => {
-        if (gardens.length > 0) {
-          setAllGardens(gardens);
-        }
-      }).catch((err: any) => {
-        console.error('Error loading all gardens:', err);
-      });
+      loadAllGardens(false)
+        .then((gardens: OSMWay[]) => {
+          if (gardens.length > 0) {
+            setAllGardens(gardens);
+          }
+        })
+        .catch((err: unknown) => {
+          console.error("Error loading all gardens:", err);
+        });
     }
   }, [cookiePreferences.openStreetMap]);
 
   const handleSearch = async (gardenNumber: string) => {
     setSearchError(null);
-    
+
     // Prüfe zuerst ob der Garten in den Mock-Daten existiert
     // Warum zuerst Mock-Daten?
     // - Lokale Datenbank ist schneller als API-Request
     // - Enthält zusätzliche Informationen (Preis, Verfügbarkeit, etc.)
     const garden = findGardenByNumber(gardenNumber);
-    
+
     if (garden) {
       // Garten in Datenbank gefunden, navigiere direkt
       navigate(`/${gardenNumber}`);
       return;
     }
-    
+
     // Wenn nicht in Datenbank, prüfe in OSM (nur wenn Zustimmung gegeben)
     // Warum OSM-Check?
     // - Einige Gärten existieren nur in OSM (noch nicht in Datenbank)
@@ -95,17 +109,17 @@ function App() {
       const cachedOsmWay = searchGardenByNumberWithUpdate(gardenNumber, (updatedWay) => {
         // Callback wird aufgerufen wenn neue Daten verfügbar sind
         // Navigiere nur wenn noch auf der Startseite (verhindert Navigation während User bereits navigiert)
-        if (updatedWay && window.location.pathname === '/') {
+        if (updatedWay && window.location.pathname === "/") {
           navigate(`/${gardenNumber}`);
         }
       });
-      
+
       if (cachedOsmWay) {
         // Garten in OSM Cache gefunden, navigiere zur Detailseite
         navigate(`/${gardenNumber}`);
         return;
       }
-      
+
       // Wenn kein Cache vorhanden, warte auf OSM-Request
       try {
         // Versuche mit forceRefresh um sicherzustellen, dass wir die neuesten Daten bekommen
@@ -118,11 +132,11 @@ function App() {
           return;
         }
       } catch (err) {
-        console.error('Error searching in OSM:', err);
+        console.error("Error searching in OSM:", err);
         // Weiter mit Fehlerbehandlung (zeigt Fehlermeldung unten)
       }
     }
-    
+
     // Garten weder in Datenbank noch in OSM gefunden
     setSearchError(`Garten mit Nummer "${gardenNumber}" wurde nicht gefunden.`);
   };
@@ -148,7 +162,12 @@ function App() {
             </header>
 
             <div className="flex-shrink-0 lg:w-96">
-              <GardenSearch onSearch={handleSearch} isLoading={false} error={searchError} onErrorDismiss={() => setSearchError(null)} />
+              <GardenSearch
+                onSearch={handleSearch}
+                isLoading={false}
+                error={searchError}
+                onErrorDismiss={() => setSearchError(null)}
+              />
             </div>
           </div>
         </div>
@@ -157,12 +176,12 @@ function App() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:flex-1 lg:min-h-0 lg:overflow-hidden">
             {/* Liste der freien Gärten */}
             <div className="lg:col-span-1 flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
-              <GardenList 
-                gardens={mockGardens} 
+              <GardenList
+                gardens={mockGardens}
                 onGardenClick={handleGardenClick}
                 hoveredGardenNumber={hoveredGardenNumber}
                 onGardenHover={setHoveredGardenNumber}
-                onFilteredGardensChange={setFilteredGardens}
+                onFilteredGardensChange={handleFilteredGardensChange}
               />
             </div>
 
@@ -171,10 +190,10 @@ function App() {
               <div className="flex-1 min-h-[350px] lg:min-h-[350px] aspect-square lg:aspect-auto flex flex-col relative">
                 {/* Graue Box als Platzhalter für die Karte */}
                 <div className="absolute inset-0 bg-scholle-border rounded-lg border border-scholle-border" />
-                
+
                 {cookiePreferences.openStreetMap ? (
-                  <GardenMap 
-                    selectedGarden={null} 
+                  <GardenMap
+                    selectedGarden={null}
                     osmGeometry={undefined}
                     allGardens={allGardens}
                     availableGardens={filteredGardens}
@@ -188,9 +207,7 @@ function App() {
                 ) : (
                   <div className="relative z-10 w-full h-full flex items-center justify-center p-8">
                     <div className="max-w-2xl w-full bg-scholle-bg-container rounded-lg shadow-lg border border-scholle-border">
-                      <CookieConsentContent 
-                        onConsentChange={handleConsentChange}
-                      />
+                      <CookieConsentContent onConsentChange={handleConsentChange} />
                     </div>
                   </div>
                 )}
@@ -198,15 +215,18 @@ function App() {
             </div>
           </div>
         </div>
-        
+
         {/* Footer mit Hinweis zu Fehlern */}
         <div className="flex-shrink-0 border-t border-scholle-border bg-scholle-bg-light px-4 py-2">
           <p className="text-xs text-scholle-text-light text-center">
-            Fehler in der Karte? Bitte melden Sie diese an{' '}
-            <a href="mailto:scholle-map@tk22.de" className="text-scholle-blue hover:text-scholle-blue-dark underline">
+            Fehler in der Karte? Bitte melden Sie diese an{" "}
+            <a
+              href="mailto:scholle-map@tk22.de"
+              className="text-scholle-blue hover:text-scholle-blue-dark underline"
+            >
               scholle-map@tk22.de
-            </a>
-            {' '}oder direkt beim Verein.
+            </a>{" "}
+            oder direkt beim Verein.
           </p>
         </div>
       </div>

@@ -2,7 +2,7 @@
  * Utility-Funktionen für Garten-Filterung
  * Wird sowohl auf der Startseite als auch auf der Detailseite verwendet
  */
-import type { Garden } from '../types/garden';
+import type { Garden } from "../types/garden";
 
 export interface FilterValues {
   minPrice: number;
@@ -18,7 +18,7 @@ export interface FilterValues {
  * um konsistente Filterung zu gewährleisten
  */
 export function applyGardenFilters(gardens: Garden[], filters: FilterValues): Garden[] {
-  return gardens.filter(garden => {
+  return gardens.filter((garden) => {
     // Preis-Filter
     if (garden.valuation < filters.minPrice || garden.valuation > filters.maxPrice) {
       return false;
@@ -32,7 +32,7 @@ export function applyGardenFilters(gardens: Garden[], filters: FilterValues): Ga
     // "Nur frei ab sofort" Filter
     if (filters.onlyAvailableNow) {
       const lowerCaseDate = garden.availableFrom.toLowerCase();
-      if (lowerCaseDate !== 'sofort' && lowerCaseDate !== 'ab sofort') {
+      if (lowerCaseDate !== "sofort" && lowerCaseDate !== "ab sofort") {
         return false;
       }
     }
@@ -52,16 +52,16 @@ export function loadFiltersFromStorage(defaultRanges: {
   maxSize: number;
 }): FilterValues {
   try {
-    const saved = localStorage.getItem('gardenFilters');
+    const saved = localStorage.getItem("gardenFilters");
     if (saved) {
       const parsed = JSON.parse(saved);
       // Validiere gespeicherte Werte
       if (
-        typeof parsed.minPrice === 'number' &&
-        typeof parsed.maxPrice === 'number' &&
-        typeof parsed.minSize === 'number' &&
-        typeof parsed.maxSize === 'number' &&
-        typeof parsed.onlyAvailableNow === 'boolean'
+        typeof parsed.minPrice === "number" &&
+        typeof parsed.maxPrice === "number" &&
+        typeof parsed.minSize === "number" &&
+        typeof parsed.maxSize === "number" &&
+        typeof parsed.onlyAvailableNow === "boolean"
       ) {
         return {
           minPrice: parsed.minPrice,
@@ -73,7 +73,7 @@ export function loadFiltersFromStorage(defaultRanges: {
       }
     }
   } catch (error) {
-    console.error('Error loading filters from storage:', error);
+    console.error("Error loading filters from storage:", error);
   }
 
   // Fallback: Standard-Werte (alle Filter deaktiviert)
@@ -91,15 +91,15 @@ export function loadFiltersFromStorage(defaultRanges: {
  */
 export function saveFiltersToStorage(filters: FilterValues): void {
   try {
-    localStorage.setItem('gardenFilters', JSON.stringify(filters));
+    localStorage.setItem("gardenFilters", JSON.stringify(filters));
   } catch (error) {
-    console.error('Error saving filters to storage:', error);
+    console.error("Error saving filters to storage:", error);
   }
 }
 
 /**
  * Prüft ob Filter aktiv sind (d.h. von Standard-Werten abweichen)
- * 
+ *
  * @param filters Aktuelle Filter-Werte
  * @param defaultRanges Gerundete Standard-Werte (für Vergleich)
  */
@@ -120,4 +120,3 @@ export function hasActiveFilters(
     filters.onlyAvailableNow
   );
 }
-

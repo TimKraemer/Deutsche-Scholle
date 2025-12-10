@@ -6,15 +6,12 @@
 /**
  * Skaliert ein Bild mit Lanczos-Filter hoch (bessere Qualität als bilinear)
  */
-export function upscaleImage(
-  image: HTMLImageElement,
-  scaleFactor: number = 2
-): HTMLCanvasElement {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  
+export function upscaleImage(image: HTMLImageElement, scaleFactor: number = 2): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+
   if (!ctx) {
-    throw new Error('Could not get canvas context');
+    throw new Error("Could not get canvas context");
   }
 
   const newWidth = image.width * scaleFactor;
@@ -25,8 +22,8 @@ export function upscaleImage(
 
   // Verwende imageSmoothingEnabled für bessere Qualität
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  
+  ctx.imageSmoothingQuality = "high";
+
   // Zeichne das Bild hochskaliert
   ctx.drawImage(image, 0, 0, newWidth, newHeight);
 
@@ -46,16 +43,17 @@ export function getUpscaledTileUrl(
 ): string {
   // Wenn wir über dem nativen Zoom-Level sind, verwende das Tile vom maximalen Zoom-Level
   if (z > maxNativeZoom) {
-    const scale = Math.pow(2, z - maxNativeZoom);
+    const scale = 2 ** (z - maxNativeZoom);
     const scaledX = Math.floor(x / scale);
     const scaledY = Math.floor(y / scale);
-    return baseUrl.replace('{z}', maxNativeZoom.toString())
-                  .replace('{x}', scaledX.toString())
-                  .replace('{y}', scaledY.toString());
+    return baseUrl
+      .replace("{z}", maxNativeZoom.toString())
+      .replace("{x}", scaledX.toString())
+      .replace("{y}", scaledY.toString());
   }
-  
-  return baseUrl.replace('{z}', z.toString())
-                .replace('{x}', x.toString())
-                .replace('{y}', y.toString());
-}
 
+  return baseUrl
+    .replace("{z}", z.toString())
+    .replace("{x}", x.toString())
+    .replace("{y}", y.toString());
+}

@@ -1,4 +1,4 @@
-export type WaterConnectionType = 'brunnen' | 'wasserleitung' | 'brunnen-aussen' | 'kein';
+export type WaterConnectionType = "brunnen" | "wasserleitung" | "brunnen-aussen" | "kein";
 
 export interface Garden {
   id: string;
@@ -15,4 +15,3 @@ export interface Garden {
   bounds?: [[number, number], [number, number]]; // für Umrisse
   osmWayId?: number; // OSM Way ID für Plot 1050: 1412612288
 }
-

@@ -1,12 +1,16 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import './index.css'
-import App from './App.tsx'
-import GardenPage from './pages/GardenPage.tsx'
-import DebugPage from './pages/DebugPage.tsx'
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import "./index.css";
+import App from "./App.tsx";
+import DebugPage from "./pages/DebugPage.tsx";
+import GardenPage from "./pages/GardenPage.tsx";
 
-createRoot(document.getElementById('root')!).render(
+const rootElement = document.getElementById("root");
+if (!rootElement) {
+  throw new Error("Root element not found");
+}
+createRoot(rootElement).render(
   <StrictMode>
     <BrowserRouter>
       <Routes>
@@ -15,5 +19,5 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/:gardenNumber" element={<GardenPage />} />
       </Routes>
     </BrowserRouter>
-  </StrictMode>,
-)
+  </StrictMode>
+);

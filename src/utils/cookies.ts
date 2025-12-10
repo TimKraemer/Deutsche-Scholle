@@ -1,7 +1,7 @@
 /**
  * Cookie utility functions for managing cookie preferences
  */
-import type { CookiePreferences } from '../types/cookies';
+import type { CookiePreferences } from "../types/cookies";
 
 /**
  * Reads a cookie value by name
@@ -10,7 +10,7 @@ function getCookie(name: string): string | null {
   const value = `; ${document.cookie}`;
   const parts = value.split(`; ${name}=`);
   if (parts.length === 2) {
-    return parts.pop()?.split(';').shift() || null;
+    return parts.pop()?.split(";").shift() || null;
   }
   return null;
 }
@@ -19,12 +19,12 @@ function getCookie(name: string): string | null {
  * Loads cookie preferences from cookies
  */
 export function loadCookiePreferences(): CookiePreferences {
-  const savedGoogleMaps = getCookie('cookie_consent_google_maps');
-  const savedOSM = getCookie('cookie_consent_openstreetmap');
+  const savedGoogleMaps = getCookie("cookie_consent_google_maps");
+  const savedOSM = getCookie("cookie_consent_openstreetmap");
 
   return {
-    googleMaps: savedGoogleMaps === 'true',
-    openStreetMap: savedOSM === 'true',
+    googleMaps: savedGoogleMaps === "true",
+    openStreetMap: savedOSM === "true",
   };
 }
 
@@ -32,8 +32,7 @@ export function loadCookiePreferences(): CookiePreferences {
  * Checks if cookie preferences have been set
  */
 export function hasCookiePreferences(): boolean {
-  const googleMaps = getCookie('cookie_consent_google_maps');
-  const osm = getCookie('cookie_consent_openstreetmap');
+  const googleMaps = getCookie("cookie_consent_google_maps");
+  const osm = getCookie("cookie_consent_openstreetmap");
   return googleMaps !== null && osm !== null;
 }
-

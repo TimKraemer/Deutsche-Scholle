@@ -5,4 +5,3 @@ export interface CookiePreferences {
   googleMaps: boolean;
   openStreetMap: boolean;
 }
-

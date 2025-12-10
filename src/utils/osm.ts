@@ -1,5 +1,5 @@
-import type { Garden } from '../types/garden';
-import { getFromCache, setCache, CacheKeys, clearCache as clearOSMCache } from './cache';
+import type { Garden } from "../types/garden";
+import { CacheKeys, clearCache as clearOSMCache, getFromCache, setCache } from "./cache";
 
 /**
  * Leert den gesamten OSM-Cache
@@ -20,7 +20,7 @@ export function clearGardenCache(gardenNumber: string): void {
   try {
     localStorage.removeItem(`osm_cache_${cacheKey}`);
   } catch (error) {
-    console.error('Error clearing garden cache:', error);
+    console.error("Error clearing garden cache:", error);
   }
 }
 
@@ -28,15 +28,14 @@ export function clearGardenCache(gardenNumber: string): void {
 // Mehrere Server werden verwendet, um Ausfälle einzelner Server abzufedern
 // und die Last zu verteilen (Overpass API hat Rate-Limits)
 const OVERPASS_API_SERVERS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-  'https://overpass.openstreetmap.ru/api/interpreter',
-  'https://overpass-api.openstreetmap.fr/api/interpreter',
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.openstreetmap.ru/api/interpreter",
+  "https://overpass-api.openstreetmap.fr/api/interpreter",
 ];
 
-
 export interface OSMWay {
-  type: 'way';
+  type: "way";
   id: number;
   nodes: number[];
   geometry?: Array<{ lat: number; lon: number }>;
@@ -51,12 +50,12 @@ export interface OSMResponse {
 
 /**
  * Führt einen Overpass API Request mit Retry-Logik und Fallback-Servern aus
- * 
+ *
  * Warum Retry-Logik und Fallback-Server?
  * - Overpass API Server können temporär überlastet sein (504/503 Fehler)
  * - Einzelne Server können ausfallen
  * - Exponential Backoff verhindert Server-Überlastung bei Retries
- * 
+ *
  * @param query Die Overpass Query
  * @param maxRetries Maximale Anzahl von Retries pro Server
  * @param retryDelay Initiale Verzögerung zwischen Retries in ms
@@ -67,7 +66,7 @@ async function fetchOverpassAPI(
   retryDelay: number = 1000
 ): Promise<Response> {
   let lastError: Error | null = null;
-  
+
   // Versuche jeden Server (Fallback-Mechanismus)
   for (const serverUrl of OVERPASS_API_SERVERS) {
     // Retry-Logik für jeden Server (manche Queries brauchen länger)
@@ -77,68 +76,71 @@ async function fetchOverpassAPI(
         // Längere Timeouts für Retries, da komplexe Queries mehr Zeit brauchen können
         const timeout = attempt === 0 ? 30000 : 45000; // 30s bzw. 45s
         const timeoutId = setTimeout(() => controller.abort(), timeout);
-        
+
         const response = await fetch(serverUrl, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
+            "Content-Type": "application/x-www-form-urlencoded",
           },
           body: `data=${encodeURIComponent(query)}`,
           signal: controller.signal,
         });
-        
+
         clearTimeout(timeoutId);
-        
+
         // Wenn erfolgreich, gib Response zurück
         if (response.ok) {
           return response;
         }
-        
+
         // Bei 504 Gateway Timeout oder 503 Service Unavailable: Retry mit Exponential Backoff
         // Diese Fehler deuten auf temporäre Überlastung hin, nicht auf dauerhafte Probleme
         if (response.status === 504 || response.status === 503) {
           if (attempt < maxRetries - 1) {
             // Exponential Backoff: Verhindert, dass wir den Server weiter überlasten
-            const delay = retryDelay * Math.pow(2, attempt);
-            await new Promise(resolve => setTimeout(resolve, delay));
+            const delay = retryDelay * 2 ** attempt;
+            await new Promise((resolve) => setTimeout(resolve, delay));
             continue;
           }
         }
-        
+
         // Bei anderen HTTP-Fehlern: Versuche nächsten Server
         // (z.B. 404 = Query-Syntaxfehler, sollte nicht retried werden)
         if (response.status !== 504 && response.status !== 503) {
           lastError = new Error(`Overpass API error: ${response.status} ${response.statusText}`);
           break; // Versuche nächsten Server
         }
-        
+
         lastError = new Error(`Overpass API error: ${response.status} ${response.statusText}`);
       } catch (error: any) {
         // Bei AbortError (Timeout), versuche Retry
-        if (error.name === 'AbortError' && attempt < maxRetries - 1) {
-          const delay = retryDelay * Math.pow(2, attempt);
-          await new Promise(resolve => setTimeout(resolve, delay));
+        if (error.name === "AbortError" && attempt < maxRetries - 1) {
+          const delay = retryDelay * 2 ** attempt;
+          await new Promise((resolve) => setTimeout(resolve, delay));
           continue;
         }
-        
+
         lastError = error;
         // Bei anderen Fehlern, versuche nächsten Server
-        if (error.name !== 'AbortError') {
+        if (error.name !== "AbortError") {
           break;
         }
       }
     }
   }
-  
+
   // Alle Server und Retries fehlgeschlagen
-  throw lastError || new Error('Overpass API: All servers failed');
+  throw lastError || new Error("Overpass API: All servers failed");
 }
 
 /**
  * Lädt einen Garten direkt über die OSM Way ID
  * Wird intern von loadGardenByWayIdWithUpdate verwendet und für zukünftige Erweiterungen bereitgestellt
  */
-export async function loadGardenByWayId(wayId: number, forceRefresh: boolean = false): Promise<OSMWay | null> {
+export async function loadGardenByWayId(
+  wayId: number,
+  forceRefresh: boolean = false
+): Promise<OSMWay | null> {
   const cacheKey = `garden_way_${wayId}`;
   if (!forceRefresh) {
     const cached = getFromCache<OSMWay>(cacheKey);
@@ -159,7 +161,7 @@ export async function loadGardenByWayId(wayId: number, forceRefresh: boolean = f
     const response = await fetchOverpassAPI(query);
 
     const data: OSMResponse = await response.json();
-    
+
     if (data.elements && data.elements.length > 0) {
       const result = data.elements[0];
       // 2 Stunden TTL für Way-ID Lookups
@@ -169,8 +171,8 @@ export async function loadGardenByWayId(wayId: number, forceRefresh: boolean = f
 
     return null;
   } catch (error: any) {
-    if (error.name !== 'AbortError') {
-      console.error('Error loading garden by way ID:', error);
+    if (error.name !== "AbortError") {
+      console.error("Error loading garden by way ID:", error);
     }
     const staleCache = getFromCache<OSMWay>(cacheKey);
     if (staleCache) {
@@ -192,15 +194,20 @@ export function loadGardenByWayIdWithUpdate(
   onUpdate?: (garden: OSMWay | null) => void
 ): OSMWay | null {
   const cacheKey = `garden_way_${wayId}`;
-  
+
   // Gib sofort gecachte Daten zurück
   const cached = getFromCache<OSMWay>(cacheKey);
-  
+
   // Starte Background-Update (nicht await, läuft parallel)
   loadGardenByWayId(wayId, false)
     .then((updatedGarden) => {
       // Nur Callback aufrufen wenn sich Daten geändert haben
-      if (updatedGarden && (!cached || cached.id !== updatedGarden.id || JSON.stringify(cached.geometry) !== JSON.stringify(updatedGarden.geometry))) {
+      if (
+        updatedGarden &&
+        (!cached ||
+          cached.id !== updatedGarden.id ||
+          JSON.stringify(cached.geometry) !== JSON.stringify(updatedGarden.geometry))
+      ) {
         onUpdate?.(updatedGarden);
       } else if (!updatedGarden && cached) {
         // Cache wurde gelöscht oder nicht gefunden
@@ -209,9 +216,9 @@ export function loadGardenByWayIdWithUpdate(
     })
     .catch((error) => {
       // Bei Fehler einfach ignorieren, Cache bleibt bestehen
-      console.error('Background update failed:', error);
+      console.error("Background update failed:", error);
     });
-  
+
   return cached;
 }
 
@@ -221,7 +228,7 @@ export function loadGardenByWayIdWithUpdate(
  * - landuse=allotments (Vereinsflächen wie "KGV Deutsche Scholle")
  * - allotments=allotments oder allotments=site (alternative Tagging-Varianten)
  * - allotments=plot mit name (Parzellen wie "Klostergärten 1")
- * 
+ *
  * Die Hierarchie ist: Verein (landuse=allotments) > Parzelle (allotments=plot mit name) > Garten (allotments=plot mit ref)
  */
 export async function findEnclosingParcel(gardenWay: OSMWay): Promise<string | null> {
@@ -230,8 +237,8 @@ export async function findEnclosingParcel(gardenWay: OSMWay): Promise<string | n
   }
 
   // Berechne Bounds des Gartens
-  const lats = gardenWay.geometry.map(p => p.lat);
-  const lons = gardenWay.geometry.map(p => p.lon);
+  const lats = gardenWay.geometry.map((p) => p.lat);
+  const lons = gardenWay.geometry.map((p) => p.lon);
   const minLat = Math.min(...lats);
   const maxLat = Math.max(...lats);
   const minLon = Math.min(...lons);
@@ -264,13 +271,13 @@ export async function findEnclosingParcel(gardenWay: OSMWay): Promise<string | n
 
   try {
     const response = await fetchOverpassAPI(query, 2, 1500); // Weniger Retries für Parzellensuche
-    
+
     if (!response.ok) {
       return null;
     }
 
     const data: OSMResponse = await response.json();
-    
+
     if (data.elements && data.elements.length > 0) {
       // Berechne Mittelpunkt des Gartens
       const gardenCenter = {
@@ -281,18 +288,19 @@ export async function findEnclosingParcel(gardenWay: OSMWay): Promise<string | n
       // Filtere zuerst: Ausschluss des Gartens selbst
       const gardenWayId = gardenWay.id;
       const gardenArea = (maxLat - minLat) * (maxLon - minLon); // Ungefähre Fläche des Gartens
-      
+
       // Berechne Fläche für jedes Element
-      const elementsWithArea = data.elements.map(element => {
+      const elementsWithArea = data.elements.map((element) => {
         if (!element.geometry || element.geometry.length === 0) {
           return { element, area: 0 };
         }
         const elLats = element.geometry.map((p: { lat: number; lon: number }) => p.lat);
         const elLons = element.geometry.map((p: { lat: number; lon: number }) => p.lon);
-        const area = (Math.max(...elLats) - Math.min(...elLats)) * (Math.max(...elLons) - Math.min(...elLons));
+        const area =
+          (Math.max(...elLats) - Math.min(...elLats)) * (Math.max(...elLons) - Math.min(...elLons));
         return { element, area };
       });
-      
+
       // Filtere: Ausschluss des Gartens selbst
       // Behalte:
       // - Elemente mit landuse=allotments (Vereinsflächen wie "KGV Deutsche Scholle")
@@ -305,31 +313,31 @@ export async function findEnclosingParcel(gardenWay: OSMWay): Promise<string | n
           if (element.id === gardenWayId) {
             return false;
           }
-          
+
           const landuseTag = element.tags?.landuse;
           const allotmentsTag = element.tags?.allotments;
-          
+
           // Behalte Vereinsflächen (landuse=allotments) - diese sind immer größer als einzelne Gärten
-          if (landuseTag === 'allotments') {
+          if (landuseTag === "allotments") {
             return true;
           }
-          
+
           // Behalte übergeordnete Parzellen-Tags
-          if (allotmentsTag === 'allotments' || allotmentsTag === 'site') {
+          if (allotmentsTag === "allotments" || allotmentsTag === "site") {
             return true;
           }
-          
+
           // Für allotments=plot: Nur behalten wenn deutlich größer (mindestens 2x) - das sind Parzellen mit Namen
-          if (allotmentsTag === 'plot') {
+          if (allotmentsTag === "plot") {
             return area > gardenArea * 2;
           }
-          
+
           // Für Elemente ohne allotments Tag: Nur behalten wenn deutlich größer (könnten Parzellen sein)
           // Aber ausschließen wenn es Straßen sind (haben highway Tag)
           if (element.tags?.highway) {
             return false;
           }
-          
+
           // Andere Elemente ohne allotments: Nur wenn deutlich größer
           return area > gardenArea * 3; // Höhere Schwelle für unbekannte Tags
         })
@@ -338,19 +346,19 @@ export async function findEnclosingParcel(gardenWay: OSMWay): Promise<string | n
       // Priorisiere spezifische Parzellen (allotments=plot mit Namen) über Vereinsflächen (landuse=allotments)
       // Sortiere: Zuerst spezifische Parzellen (allotments=plot), dann Vereinsflächen (landuse=allotments)
       filteredElements.sort((a, b) => {
-        const aIsParcel = a.element.tags?.allotments === 'plot' && a.element.tags?.name;
-        const bIsParcel = b.element.tags?.allotments === 'plot' && b.element.tags?.name;
-        const aIsVerein = a.element.tags?.landuse === 'allotments';
-        const bIsVerein = b.element.tags?.landuse === 'allotments';
-        
+        const aIsParcel = a.element.tags?.allotments === "plot" && a.element.tags?.name;
+        const bIsParcel = b.element.tags?.allotments === "plot" && b.element.tags?.name;
+        const aIsVerein = a.element.tags?.landuse === "allotments";
+        const bIsVerein = b.element.tags?.landuse === "allotments";
+
         // Spezifische Parzellen haben höchste Priorität
         if (aIsParcel && !bIsParcel) return -1;
         if (!aIsParcel && bIsParcel) return 1;
-        
+
         // Vereinsflächen haben niedrigste Priorität
         if (aIsVerein && !bIsVerein) return 1;
         if (!aIsVerein && bIsVerein) return -1;
-        
+
         // Ansonsten nach Fläche sortieren (kleinere Parzellen zuerst, da spezifischer)
         return a.area - b.area;
       });
@@ -360,20 +368,20 @@ export async function findEnclosingParcel(gardenWay: OSMWay): Promise<string | n
       // WICHTIG: Durch die Sortierung werden spezifische Parzellen (allotments=plot) zuerst geprüft,
       // Vereinsflächen (landuse=allotments) kommen zuletzt
       let vereinFallback: { element: any; name: string } | null = null;
-      
+
       for (const { element } of filteredElements) {
         if (element.geometry && element.geometry.length > 0) {
           const isInside = isPointInPolygon(gardenCenter, element.geometry);
-          
+
           if (isInside) {
-            const isVerein = element.tags?.landuse === 'allotments';
-            
+            const isVerein = element.tags?.landuse === "allotments";
+
             // Wenn es eine Vereinsfläche ist, merke sie als Fallback, aber suche weiter
             if (isVerein && element.tags?.name) {
               vereinFallback = { element, name: element.tags.name };
               continue; // Suche weiter nach spezifischeren Parzellen
             }
-            
+
             // Spezifische Parzelle oder andere Parzellen-Typen gefunden - gib sie zurück
             if (element.tags?.name) {
               return element.tags.name;
@@ -381,40 +389,41 @@ export async function findEnclosingParcel(gardenWay: OSMWay): Promise<string | n
           }
         }
       }
-      
+
       // Fallback: Wenn keine spezifische Parzelle gefunden wurde, verwende Vereinsfläche
       if (vereinFallback) {
         return vereinFallback.name;
       }
-      
+
       // Fallback: Wenn keine gefilterte Parzelle gefunden wurde, suche nach größtem Polygon
       // das den Garten umschließt (auch wenn es allotments=plot hat, aber größer ist)
       let largestEnclosing: { element: any; area: number } | null = null;
-      
+
       for (const element of data.elements) {
         if (element.id === gardenWayId) continue; // Überspringe Garten selbst
-        
+
         if (element.geometry && element.geometry.length > 0) {
           const isInside = isPointInPolygon(gardenCenter, element.geometry);
           if (isInside) {
             // Berechne ungefähre Fläche des Polygons
             const lats = element.geometry.map((p: { lat: number; lon: number }) => p.lat);
             const lons = element.geometry.map((p: { lat: number; lon: number }) => p.lon);
-            const area = (Math.max(...lats) - Math.min(...lats)) * (Math.max(...lons) - Math.min(...lons));
-            
+            const area =
+              (Math.max(...lats) - Math.min(...lats)) * (Math.max(...lons) - Math.min(...lons));
+
             if (!largestEnclosing || area > largestEnclosing.area) {
               largestEnclosing = { element, area };
             }
           }
         }
       }
-      
-      if (largestEnclosing && largestEnclosing.element.tags?.name) {
+
+      if (largestEnclosing?.element.tags?.name) {
         return largestEnclosing.element.tags.name;
       }
-      
+
       // Fallback: Nimm die erste gefundene Parzelle mit Name
-      const firstParcelWithName = data.elements.find(el => el.tags?.name);
+      const firstParcelWithName = data.elements.find((el) => el.tags?.name);
       if (firstParcelWithName) {
         return firstParcelWithName.tags.name || null;
       }
@@ -422,8 +431,8 @@ export async function findEnclosingParcel(gardenWay: OSMWay): Promise<string | n
 
     return null;
   } catch (error: any) {
-    if (error.name !== 'AbortError') {
-      console.error('Error finding enclosing parcel:', error);
+    if (error.name !== "AbortError") {
+      console.error("Error finding enclosing parcel:", error);
     }
     return null;
   }
@@ -432,16 +441,20 @@ export async function findEnclosingParcel(gardenWay: OSMWay): Promise<string | n
 /**
  * Einfache Punkt-in-Polygon-Prüfung
  */
-function isPointInPolygon(point: { lat: number; lon: number }, polygon: Array<{ lat: number; lon: number }>): boolean {
+function isPointInPolygon(
+  point: { lat: number; lon: number },
+  polygon: Array<{ lat: number; lon: number }>
+): boolean {
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
     const xi = polygon[i].lon;
     const yi = polygon[i].lat;
     const xj = polygon[j].lon;
     const yj = polygon[j].lat;
-    
-    const intersect = ((yi > point.lat) !== (yj > point.lat)) &&
-      (point.lon < (xj - xi) * (point.lat - yi) / (yj - yi) + xi);
+
+    const intersect =
+      yi > point.lat !== yj > point.lat &&
+      point.lon < ((xj - xi) * (point.lat - yi)) / (yj - yi) + xi;
     if (intersect) inside = !inside;
   }
   return inside;
@@ -452,7 +465,10 @@ function isPointInPolygon(point: { lat: number; lon: number }, polygon: Array<{ 
  * Verwendet Caching um API-Aufrufe zu reduzieren
  * Sucht nach allotments=plot mit ref=gardenNumber (ref ist das Standard-Tag für Referenznummern in OSM)
  */
-export async function searchGardenByNumber(gardenNumber: string, forceRefresh: boolean = false): Promise<OSMWay | null> {
+export async function searchGardenByNumber(
+  gardenNumber: string,
+  forceRefresh: boolean = false
+): Promise<OSMWay | null> {
   // Prüfe zuerst den Cache (außer bei Force Refresh)
   const cacheKey = CacheKeys.GARDEN(gardenNumber);
   if (!forceRefresh) {
@@ -476,11 +492,11 @@ export async function searchGardenByNumber(gardenNumber: string, forceRefresh: b
   try {
     const response = await fetchOverpassAPI(query);
     const data: OSMResponse = await response.json();
-    
+
     if (data.elements && data.elements.length > 0) {
       // Finde den passendsten Eintrag (exakte Übereinstimmung)
-      const result = data.elements.find(el => el.tags.ref === gardenNumber) || data.elements[0];
-      
+      const result = data.elements.find((el) => el.tags.ref === gardenNumber) || data.elements[0];
+
       // Speichere im Cache (2 Stunden TTL für einzelne Gärten - kürzer für schnellere Updates)
       setCache(cacheKey, result, 2 * 60 * 60 * 1000);
       return result;
@@ -488,7 +504,7 @@ export async function searchGardenByNumber(gardenNumber: string, forceRefresh: b
 
     return null;
   } catch (error: any) {
-    console.error('Error searching garden in OSM:', error);
+    console.error("Error searching garden in OSM:", error);
     // Bei Fehler: Versuche aus Cache zu laden (auch wenn abgelaufen)
     const staleCache = getFromCache<OSMWay>(cacheKey);
     if (staleCache) {
@@ -500,12 +516,12 @@ export async function searchGardenByNumber(gardenNumber: string, forceRefresh: b
 
 /**
  * Hybrid-Ansatz: Gibt sofort gecachte Daten zurück und aktualisiert im Hintergrund
- * 
+ *
  * Warum dieser Ansatz?
  * - Sofortige Anzeige für bessere UX (kein Warten auf API-Request)
  * - Hintergrund-Update stellt sicher, dass Daten aktuell bleiben
  * - Bei API-Fehlern bleibt die App funktionsfähig (zeigt Cache)
- * 
+ *
  * @param gardenNumber Die Gartennummer
  * @param onUpdate Callback der aufgerufen wird, wenn neue Daten verfügbar sind
  * @returns Gecachte Daten (falls vorhanden) oder null
@@ -515,17 +531,22 @@ export function searchGardenByNumberWithUpdate(
   onUpdate?: (garden: OSMWay | null) => void
 ): OSMWay | null {
   const cacheKey = CacheKeys.GARDEN(gardenNumber);
-  
+
   // Gib sofort gecachte Daten zurück (für schnelle Anzeige)
   const cached = getFromCache<OSMWay>(cacheKey);
-  
+
   // Starte Background-Update (nicht await, läuft parallel)
   // Dies ermöglicht sofortige Anzeige ohne auf API zu warten
   searchGardenByNumber(gardenNumber, false)
     .then((updatedGarden) => {
       // Nur Callback aufrufen wenn sich Daten geändert haben
       // Verhindert unnötige Re-Renders bei identischen Daten
-      if (updatedGarden && (!cached || cached.id !== updatedGarden.id || JSON.stringify(cached.geometry) !== JSON.stringify(updatedGarden.geometry))) {
+      if (
+        updatedGarden &&
+        (!cached ||
+          cached.id !== updatedGarden.id ||
+          JSON.stringify(cached.geometry) !== JSON.stringify(updatedGarden.geometry))
+      ) {
         onUpdate?.(updatedGarden);
       } else if (!updatedGarden && cached) {
         // Cache wurde gelöscht oder nicht gefunden
@@ -535,9 +556,9 @@ export function searchGardenByNumberWithUpdate(
     .catch((error) => {
       // Bei Fehler einfach ignorieren, Cache bleibt bestehen
       // App bleibt funktionsfähig auch wenn API temporär nicht erreichbar ist
-      console.error('Background update failed:', error);
+      console.error("Background update failed:", error);
     });
-  
+
   return cached;
 }
 
@@ -569,16 +590,16 @@ export async function loadAllGardens(forceRefresh: boolean = false): Promise<OSM
     const response = await fetchOverpassAPI(query);
     const data: OSMResponse = await response.json();
     const gardens = data.elements || [];
-    
+
     // Speichere im Cache (1 Stunde TTL für alle Gärten - kürzer für schnellere Updates)
     if (gardens.length > 0) {
       setCache(CacheKeys.ALL_GARDENS, gardens, 60 * 60 * 1000);
     }
-    
+
     return gardens;
   } catch (error: any) {
-    if (error.name !== 'AbortError') {
-      console.error('Error loading all gardens from OSM:', error);
+    if (error.name !== "AbortError") {
+      console.error("Error loading all gardens from OSM:", error);
     }
     // Bei Fehler: Versuche aus Cache zu laden (auch wenn abgelaufen)
     const staleCache = getFromCache<OSMWay[]>(CacheKeys.ALL_GARDENS);
@@ -591,38 +612,38 @@ export async function loadAllGardens(forceRefresh: boolean = false): Promise<OSM
 
 /**
  * Hybrid-Ansatz: Gibt sofort gecachte Daten zurück und aktualisiert im Hintergrund
- * 
+ *
  * Warum dieser Ansatz?
  * - Sofortige Anzeige aller Gärten ohne Warten auf großen API-Request
  * - Hintergrund-Update stellt sicher, dass neue Gärten gefunden werden
  * - Bei API-Fehlern bleibt die App funktionsfähig (zeigt Cache)
- * 
+ *
  * @param onUpdate Callback der aufgerufen wird, wenn neue Daten verfügbar sind
  * @returns Gecachte Daten (falls vorhanden) oder leeres Array
  */
-export function loadAllGardensWithUpdate(
-  onUpdate?: (gardens: OSMWay[]) => void
-): OSMWay[] {
+export function loadAllGardensWithUpdate(onUpdate?: (gardens: OSMWay[]) => void): OSMWay[] {
   // Gib sofort gecachte Daten zurück (für schnelle Anzeige)
   const cached = getFromCache<OSMWay[]>(CacheKeys.ALL_GARDENS) || [];
-  
+
   // Starte Background-Update (nicht await, läuft parallel)
   // Dies ermöglicht sofortige Anzeige ohne auf API zu warten
   loadAllGardens(false)
     .then((updatedGardens) => {
       // Nur Callback aufrufen wenn sich Daten geändert haben
       // Verhindert unnötige Re-Renders bei identischen Daten
-      if (updatedGardens.length !== cached.length || 
-          updatedGardens.some((g, i) => !cached[i] || cached[i].id !== g.id)) {
+      if (
+        updatedGardens.length !== cached.length ||
+        updatedGardens.some((g, i) => !cached[i] || cached[i].id !== g.id)
+      ) {
         onUpdate?.(updatedGardens);
       }
     })
     .catch((error) => {
       // Bei Fehler einfach ignorieren, Cache bleibt bestehen
       // App bleibt funktionsfähig auch wenn API temporär nicht erreichbar ist
-      console.error('Background update failed:', error);
+      console.error("Background update failed:", error);
     });
-  
+
   return cached;
 }
 
@@ -640,15 +661,17 @@ function calculatePolygonArea(geometry: Array<{ lat: number; lon: number }>): nu
 
   // Stelle sicher, dass das Polygon geschlossen ist
   const coords = [...geometry];
-  if (coords[0].lat !== coords[coords.length - 1].lat || 
-      coords[0].lon !== coords[coords.length - 1].lon) {
+  if (
+    coords[0].lat !== coords[coords.length - 1].lat ||
+    coords[0].lon !== coords[coords.length - 1].lon
+  ) {
     coords.push(coords[0]);
   }
 
   // Berechne die Fläche mit der sphärischen Exzess-Formel
   for (let i = 0; i < coords.length - 1; i++) {
     const j = (i + 1) % (coords.length - 1);
-    
+
     const lat1 = (coords[i].lat * Math.PI) / 180;
     const lon1 = (coords[i].lon * Math.PI) / 180;
     const lat2 = (coords[j].lat * Math.PI) / 180;
@@ -657,26 +680,26 @@ function calculatePolygonArea(geometry: Array<{ lat: number; lon: number }>): nu
     area += (lon2 - lon1) * (2 + Math.sin(lat1) + Math.sin(lat2));
   }
 
-  area = Math.abs(area * R * R / 2);
-  
+  area = Math.abs((area * R * R) / 2);
+
   // Wenn die Berechnung zu klein ist, versuche eine einfachere Approximation
   if (area < 1) {
     // Berechne Bounding Box und verwende als Approximation
-    const lats = geometry.map(p => p.lat);
-    const lons = geometry.map(p => p.lon);
+    const lats = geometry.map((p) => p.lat);
+    const lons = geometry.map((p) => p.lon);
     const minLat = Math.min(...lats);
     const maxLat = Math.max(...lats);
     const minLon = Math.min(...lons);
     const maxLon = Math.max(...lons);
-    
+
     // Näherung: Rechteckfläche in m²
-    const latDiff = (maxLat - minLat) * Math.PI / 180;
-    const lonDiff = (maxLon - minLon) * Math.PI / 180;
-    const avgLat = ((minLat + maxLat) / 2) * Math.PI / 180;
-    
+    const latDiff = ((maxLat - minLat) * Math.PI) / 180;
+    const lonDiff = ((maxLon - minLon) * Math.PI) / 180;
+    const avgLat = (((minLat + maxLat) / 2) * Math.PI) / 180;
+
     area = R * R * latDiff * lonDiff * Math.cos(avgLat);
   }
-  
+
   return Math.round(area);
 }
 
@@ -686,18 +709,24 @@ function calculatePolygonArea(geometry: Array<{ lat: number; lon: number }>): nu
  * @param mockData Optionale Mock-Daten aus der Datenbank
  * @param enclosingParcel Die umschließende Parzelle aus OSM (optional)
  */
-export function osmWayToGarden(osmWay: OSMWay, mockData?: Partial<Garden>, enclosingParcel?: string | null): Garden | null {
+export function osmWayToGarden(
+  osmWay: OSMWay,
+  mockData?: Partial<Garden>,
+  enclosingParcel?: string | null
+): Garden | null {
   if (!osmWay.geometry || osmWay.geometry.length === 0) {
     return null;
   }
 
   // Berechne Zentrum der Geometrie
-  const centerLat = osmWay.geometry.reduce((sum, point) => sum + point.lat, 0) / osmWay.geometry.length;
-  const centerLon = osmWay.geometry.reduce((sum, point) => sum + point.lon, 0) / osmWay.geometry.length;
+  const centerLat =
+    osmWay.geometry.reduce((sum, point) => sum + point.lat, 0) / osmWay.geometry.length;
+  const centerLon =
+    osmWay.geometry.reduce((sum, point) => sum + point.lon, 0) / osmWay.geometry.length;
 
   // Berechne Bounds
-  const lats = osmWay.geometry.map(p => p.lat);
-  const lons = osmWay.geometry.map(p => p.lon);
+  const lats = osmWay.geometry.map((p) => p.lat);
+  const lons = osmWay.geometry.map((p) => p.lon);
   const minLat = Math.min(...lats);
   const maxLat = Math.max(...lats);
   const minLon = Math.min(...lons);
@@ -707,21 +736,24 @@ export function osmWayToGarden(osmWay: OSMWay, mockData?: Partial<Garden>, enclo
   const calculatedSize = calculatePolygonArea(osmWay.geometry);
 
   // Verwende umschließende Parzelle aus OSM, falls vorhanden, sonst Mock-Daten
-  const parcel = enclosingParcel || mockData?.parcel || '';
+  const parcel = enclosingParcel || mockData?.parcel || "";
 
   return {
     id: `garden-${osmWay.id}`,
-    number: osmWay.tags.ref || '', // ref ist das Standard-Tag für Gartennummern
+    number: osmWay.tags.ref || "", // ref ist das Standard-Tag für Gartennummern
     parcel: parcel,
     size: mockData?.size || 0, // Datenbank-Größe
     osmSize: calculatedSize, // OSM-Größe (immer setzen, auch wenn 0)
-    availableFrom: mockData?.availableFrom || '',
+    availableFrom: mockData?.availableFrom || "",
     valuation: mockData?.valuation || 0,
     valueReduction: mockData?.valueReduction || 0,
     hasElectricity: mockData?.hasElectricity, // Optional: nur wenn bekannt
     waterConnection: mockData?.waterConnection, // Optional: nur wenn bekannt
     coordinates: [centerLat, centerLon] as [number, number],
-    bounds: [[minLat, minLon], [maxLat, maxLon]] as [[number, number], [number, number]],
+    bounds: [
+      [minLat, minLon],
+      [maxLat, maxLon],
+    ] as [[number, number], [number, number]],
     osmWayId: osmWay.id,
   };
 }
@@ -729,7 +761,8 @@ export function osmWayToGarden(osmWay: OSMWay, mockData?: Partial<Garden>, enclo
 /**
  * Konvertiert OSM Geometrie zu Leaflet Polygon-Koordinaten
  */
-export function osmGeometryToLeafletCoords(geometry: Array<{ lat: number; lon: number }>): [number, number][] {
-  return geometry.map(point => [point.lat, point.lon]);
+export function osmGeometryToLeafletCoords(
+  geometry: Array<{ lat: number; lon: number }>
+): [number, number][] {
+  return geometry.map((point) => [point.lat, point.lon]);
 }
-

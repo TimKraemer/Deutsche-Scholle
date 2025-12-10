@@ -54,7 +54,7 @@ Die Anwendung nutzt einen ausgeklügelten Algorithmus, um automatisch die richti
 - **3D-Visualisierung**: Google Maps API für Satellitenansicht
 - **Routing**: React Router DOM
 - **Datenquelle**: OpenStreetMap Overpass API
-- **Code Quality**: ESLint, TypeScript strict mode
+- **Code Quality**: Biome (Linter & Formatter), TypeScript strict mode
 
 ## 📋 Features im Detail
 
@@ -100,7 +100,7 @@ Die Anwendung nutzt einen ausgeklügelten Algorithmus, um automatisch die richti
 ## 🚀 Installation & Setup
 
 ### Voraussetzungen
-- Node.js 18+ und npm
+- Bun (https://bun.sh)
 - Google Maps API Key (optional, für 3D-Satellitenansicht)
 
 ### Installation
@@ -111,10 +111,10 @@ git clone <repository-url>
 cd Deutsche-Scholle
 
 # Dependencies installieren
-npm install
+bun install
 
 # Entwicklungsserver starten
-npm run dev
+bun run dev
 ```
 
 ### Umgebungsvariablen
@@ -128,7 +128,7 @@ VITE_GOOGLE_MAPS_API_KEY=dein-google-maps-api-key
 ### Build für Production
 
 ```bash
-npm run build
+bun run build
 ```
 
 Die gebauten Dateien befinden sich im `dist/` Verzeichnis.
