@@ -28,7 +28,7 @@ export default function CookieConsentHint({
   };
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center bg-scholle-bg-light z-[1000]">
+    <div className="absolute inset-0 flex items-center justify-center bg-scholle-bg-light z-1000">
       <div
         className="text-center p-6 bg-scholle-bg-container rounded-lg shadow-lg max-w-md cursor-pointer hover:shadow-xl transition-shadow border border-scholle-border"
         onClick={onOpenCookieConsent}

@@ -88,8 +88,8 @@ export default function GardenList({
   const isFiltered = hasActiveFilters && availableGardens.length > 0;
 
   return (
-    <div className="bg-scholle-bg-container rounded-lg border border-scholle-border shadow-sm flex flex-col lg:h-full lg:min-h-0">
-      <div className="bg-scholle-green text-white px-4 py-3 rounded-t-lg flex-shrink-0">
+    <div className="bg-scholle-bg-container rounded-lg border border-scholle-border shadow-xs flex flex-col lg:h-full lg:min-h-0">
+      <div className="bg-scholle-green text-white px-4 py-3 rounded-t-lg shrink-0">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-xl font-bold">Freie Gärten</h2>
         </div>
@@ -261,7 +261,7 @@ export default function GardenList({
                   onClick={() => onGardenClick(garden.number)}
                   onMouseEnter={() => onGardenHover?.(garden.number)}
                   onMouseLeave={() => onGardenHover?.(null)}
-                  className={`w-full text-left p-4 transition-colors focus:outline-none focus:ring-2 focus:ring-scholle-green focus:ring-inset relative z-10 ${
+                  className={`w-full text-left p-4 transition-colors focus:outline-hidden focus:ring-2 focus:ring-scholle-green focus:ring-inset relative z-10 ${
                     isHovered
                       ? "bg-scholle-green/10 border-l-4 border-l-scholle-green"
                       : "hover:bg-scholle-bg-light"
@@ -327,7 +327,7 @@ export default function GardenList({
                       </div>
                     </div>
                     <svg
-                      className="w-5 h-5 text-scholle-text-light flex-shrink-0"
+                      className="w-5 h-5 text-scholle-text-light shrink-0"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"

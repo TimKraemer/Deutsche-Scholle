@@ -133,14 +133,14 @@ export default function GardenChecklist({ garden }: GardenChecklistProps) {
             key={step.id}
             className="flex items-start gap-4 p-4 bg-scholle-bg-light rounded-lg border border-scholle-border hover:border-scholle-green transition-colors"
           >
-            <div className="flex-shrink-0">
+            <div className="shrink-0">
               <div className="w-10 h-10 rounded-full bg-scholle-green text-white flex items-center justify-center font-bold text-sm">
                 {step.id}
               </div>
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-start gap-3 mb-1">
-                <div className="flex-shrink-0 mt-1 text-scholle-green">{step.icon}</div>
+                <div className="shrink-0 mt-1 text-scholle-green">{step.icon}</div>
                 <div className="flex-1">
                   <h4 className="font-semibold text-scholle-text mb-1">{step.title}</h4>
                   <p className="text-sm text-scholle-text-light">{step.description}</p>
@@ -165,7 +165,7 @@ export default function GardenChecklist({ garden }: GardenChecklistProps) {
       <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
         <div className="flex items-start gap-3">
           <svg
-            className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"
+            className="w-5 h-5 text-blue-600 shrink-0 mt-0.5"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"

@@ -130,7 +130,7 @@ export default function CookieConsentContent({
                     }}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-scholle-border peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-scholle-green-light rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-scholle-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-scholle-green"></div>
+                  <div className="w-11 h-6 bg-scholle-border peer-focus:outline-hidden peer-focus:ring-4 peer-focus:ring-scholle-green-light rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-scholle-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-scholle-green"></div>
                 </label>
               </div>
             </div>
@@ -157,7 +157,7 @@ export default function CookieConsentContent({
                     Google Maps (3D-Luftbild)
                   </h3>
                   {openStreetMapConsent !== true && (
-                    <span className="text-xs text-scholle-text-light bg-scholle-border px-2 py-0.5 rounded">
+                    <span className="text-xs text-scholle-text-light bg-scholle-border px-2 py-0.5 rounded-sm">
                       Benötigt OSM
                     </span>
                   )}
@@ -201,7 +201,7 @@ export default function CookieConsentContent({
                   <div
                     className={`w-11 h-6 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-scholle-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${
                       openStreetMapConsent === true
-                        ? "bg-scholle-border peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-scholle-green-light peer-checked:bg-scholle-green"
+                        ? "bg-scholle-border peer-focus:outline-hidden peer-focus:ring-4 peer-focus:ring-scholle-green-light peer-checked:bg-scholle-green"
                         : "bg-scholle-border"
                     }`}
                   ></div>

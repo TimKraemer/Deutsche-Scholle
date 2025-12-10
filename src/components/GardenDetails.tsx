@@ -41,7 +41,7 @@ export default function GardenDetails({
     const displaySize = garden?.osmSize || osmSize || garden?.size || null;
 
     return (
-      <div className="w-full bg-scholle-bg-container rounded-lg border border-scholle-border shadow-sm flex flex-col lg:h-full lg:min-h-0 overflow-hidden">
+      <div className="w-full bg-scholle-bg-container rounded-lg border border-scholle-border shadow-xs flex flex-col lg:h-full lg:min-h-0 overflow-hidden">
         <div className="p-6 space-y-4 overflow-y-auto flex-1 min-h-0 overflow-x-visible">
           <h2 className="text-2xl font-bold mb-4 text-scholle-text border-b border-scholle-border pb-2">
             Gartendetails
@@ -101,7 +101,7 @@ export default function GardenDetails({
 
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mt-4">
               <div className="flex items-start">
-                <div className="flex-shrink-0">
+                <div className="shrink-0">
                   <svg
                     className="h-6 w-6 text-yellow-600"
                     fill="none"
@@ -236,7 +236,7 @@ export default function GardenDetails({
   };
 
   return (
-    <div className="w-full bg-scholle-bg-container rounded-lg border border-scholle-border shadow-sm flex flex-col lg:h-full lg:min-h-0 overflow-hidden">
+    <div className="w-full bg-scholle-bg-container rounded-lg border border-scholle-border shadow-xs flex flex-col lg:h-full lg:min-h-0 overflow-hidden">
       <div className="p-6 overflow-y-auto flex-1 min-h-0 overflow-x-visible">
         <h2 className="text-2xl font-bold mb-4 text-scholle-text border-b border-scholle-border pb-2">
           Gartendetails
@@ -294,7 +294,7 @@ export default function GardenDetails({
                 {/* Stromanschluss - nur anzeigen wenn bekannt und vorhanden */}
                 {garden.hasElectricity === true && (
                   <div className="flex items-center gap-3">
-                    <div className="flex-shrink-0">{getElectricityIcon(true)}</div>
+                    <div className="shrink-0">{getElectricityIcon(true)}</div>
                     <span className="text-sm text-scholle-text">Stromanschluss vorhanden</span>
                   </div>
                 )}
@@ -302,7 +302,7 @@ export default function GardenDetails({
                 {/* Wasseranschluss - nur anzeigen wenn bekannt und vorhanden */}
                 {garden.waterConnection !== undefined && garden.waterConnection !== "kein" && (
                   <div className="flex items-center gap-3">
-                    <div className="flex-shrink-0">{getWaterIcon(garden.waterConnection)}</div>
+                    <div className="shrink-0">{getWaterIcon(garden.waterConnection)}</div>
                     <span className="text-sm text-scholle-text">
                       {getWaterConnectionLabel(garden.waterConnection)}
                     </span>

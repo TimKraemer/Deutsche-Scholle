@@ -287,7 +287,7 @@ export default function GardenPage() {
     <>
       <CookieConsent ref={cookieConsentRef} onConsentChange={handleConsentChange} />
       <div className="min-h-screen bg-scholle-bg flex flex-col lg:h-screen lg:overflow-hidden">
-        <div className="container mx-auto px-4 py-4 flex-shrink-0">
+        <div className="container mx-auto px-4 py-4 shrink-0">
           <header className="mb-4">
             <div className="flex items-center gap-4 mb-1">
               <button
@@ -329,9 +329,9 @@ export default function GardenPage() {
                 />
               ) : selectedGarden && !hasOsmData && cookiePreferences.openStreetMap ? (
                 <div className="flex-1 min-h-[350px] bg-scholle-bg-light rounded-lg border border-scholle-border flex items-center justify-center">
-                  <div className="bg-scholle-bg-container rounded-lg border border-scholle-border shadow-sm p-6 max-w-2xl w-full">
+                  <div className="bg-scholle-bg-container rounded-lg border border-scholle-border shadow-xs p-6 max-w-2xl w-full">
                     <div className="flex items-start gap-4">
-                      <div className="flex-shrink-0">
+                      <div className="shrink-0">
                         <svg
                           className="h-6 w-6 text-yellow-600"
                           fill="none"
@@ -373,11 +373,11 @@ export default function GardenPage() {
               )}
             </div>
 
-            <div className="lg:col-span-1 flex-shrink-0 relative z-10 flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
+            <div className="lg:col-span-1 shrink-0 relative z-10 flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
               {/* Navigation zu vorherigem/nächstem Garten */}
               {/* WICHTIG: Beim Durchblättern werden nur Gärten angezeigt, die den aktiven Filtern entsprechen */}
               {selectedGarden && currentIndex >= 0 && (previousGarden || nextGarden) && (
-                <div className="mb-4 flex items-center justify-between gap-2 bg-scholle-bg-container rounded-lg border border-scholle-border p-3 flex-shrink-0">
+                <div className="mb-4 flex items-center justify-between gap-2 bg-scholle-bg-container rounded-lg border border-scholle-border p-3 shrink-0">
                   <button
                     onClick={() => previousGarden && navigate(`/${previousGarden.number}`)}
                     disabled={!previousGarden}
@@ -445,7 +445,7 @@ export default function GardenPage() {
         </div>
 
         {/* Footer mit Hinweis zu Fehlern */}
-        <div className="flex-shrink-0 border-t border-scholle-border bg-scholle-bg-light px-4 py-2">
+        <div className="shrink-0 border-t border-scholle-border bg-scholle-bg-light px-4 py-2">
           <p className="text-xs text-scholle-text-light text-center">
             Fehler in der Karte? Bitte melden Sie diese an{" "}
             <a

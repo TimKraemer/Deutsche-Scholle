@@ -196,7 +196,7 @@ export default function GardenFilters({
         }`}
       >
         <div
-          className={`px-4 pb-4 space-y-6 pt-4 mx-2 mb-2 rounded-lg bg-white border-2 border-scholle-green/20 shadow-sm transition-opacity duration-300 ${
+          className={`px-4 pb-4 space-y-6 pt-4 mx-2 mb-2 rounded-lg bg-white border-2 border-scholle-green/20 shadow-xs transition-opacity duration-300 ${
             isExpanded ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
         >

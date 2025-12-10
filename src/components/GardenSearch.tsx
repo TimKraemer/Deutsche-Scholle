@@ -1,5 +1,4 @@
-import { useMemo, useState } from "react";
-import { mockGardens } from "../data/mockGardens";
+import { useState } from "react";
 
 interface GardenSearchProps {
   onSearch: (gardenNumber: string) => void;
@@ -15,15 +14,6 @@ export default function GardenSearch({
   onErrorDismiss,
 }: GardenSearchProps) {
   const [gardenNumber, setGardenNumber] = useState("");
-
-  // Wähle einen zufälligen Garten für den Platzhalter (einmalig beim Mount)
-  const placeholderExample = useMemo(() => {
-    if (mockGardens.length === 0) {
-      return "1050";
-    }
-    const randomIndex = Math.floor(Math.random() * mockGardens.length);
-    return mockGardens[randomIndex].number;
-  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,7 +37,7 @@ export default function GardenSearch({
           type="text"
           value={gardenNumber}
           onChange={handleInputChange}
-          placeholder={`Garten-Nr. (z.B. ${placeholderExample})`}
+          placeholder="Garten-Nr. (z.B. 1050)"
           className={`flex-1 px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-scholle-green focus:border-transparent bg-scholle-bg-container ${
             error ? "border-red-300 bg-red-50" : "border-scholle-border"
           }`}

@@ -305,8 +305,8 @@ function GardenPolygon({
             } ${
               isAvailable
                 ? isHovered
-                  ? "text-white bg-scholle-green-dark text-lg px-2 py-1 rounded"
-                  : "text-white bg-scholle-green hover:bg-scholle-green-dark hover:text-lg px-2 py-1 rounded"
+                  ? "text-white bg-scholle-green-dark text-lg px-2 py-1 rounded-sm"
+                  : "text-white bg-scholle-green hover:bg-scholle-green-dark hover:text-lg px-2 py-1 rounded-sm"
                 : isSelected
                   ? "text-scholle-green-dark"
                   : "text-scholle-text hover:text-scholle-green"
@@ -765,7 +765,7 @@ export default function GardenMap({
     >
       {/* Map Type Toggle - Nur anzeigen wenn Umschalten möglich ist */}
       {!disable3D && (
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[1001] bg-scholle-bg-container rounded-lg shadow-lg p-1 flex gap-1 border border-scholle-border">
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-1001 bg-scholle-bg-container rounded-lg shadow-lg p-1 flex gap-1 border border-scholle-border">
           <button
             onClick={() => setMapType("osm")}
             className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
@@ -856,7 +856,7 @@ export default function GardenMap({
                     maxNativeZoom={19}
                   />
                   {!GOOGLE_MAPS_API_KEY && (
-                    <div className="absolute top-12 right-2 z-[1000] bg-yellow-50 border border-yellow-200 rounded-lg p-2 text-xs text-yellow-800 max-w-xs">
+                    <div className="absolute top-12 right-2 z-1000 bg-yellow-50 border border-yellow-200 rounded-lg p-2 text-xs text-yellow-800 max-w-xs">
                       ⚠ Google Maps API Key nicht gefunden. Bitte setzen Sie
                       VITE_GOOGLE_MAPS_API_KEY in der .env Datei.
                     </div>
@@ -920,8 +920,8 @@ export default function GardenMap({
                         } ${
                           isAvailable
                             ? isHovered
-                              ? "text-white bg-scholle-green-dark text-lg px-2 py-1 rounded"
-                              : "text-white bg-scholle-green hover:bg-scholle-green-dark hover:text-lg px-2 py-1 rounded"
+                              ? "text-white bg-scholle-green-dark text-lg px-2 py-1 rounded-sm"
+                              : "text-white bg-scholle-green hover:bg-scholle-green-dark hover:text-lg px-2 py-1 rounded-sm"
                             : "text-scholle-green-dark"
                         }`}
                         onClick={

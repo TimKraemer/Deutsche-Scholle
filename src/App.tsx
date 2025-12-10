@@ -149,10 +149,10 @@ function App() {
     <>
       <CookieConsent ref={cookieConsentRef} onConsentChange={handleConsentChange} />
       <div className="min-h-screen bg-scholle-bg flex flex-col lg:h-screen lg:overflow-hidden">
-        <div className="container mx-auto px-4 py-4 flex-shrink-0">
+        <div className="container mx-auto px-4 py-4 shrink-0">
           {/* Header und Suche nebeneinander auf großen Bildschirmen */}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
-            <header className="flex-shrink-0">
+            <header className="shrink-0">
               <h1 className="text-2xl lg:text-3xl font-bold text-scholle-text mb-1">
                 Kleingartenverein Deutsche Scholle
               </h1>
@@ -161,7 +161,7 @@ function App() {
               </p>
             </header>
 
-            <div className="flex-shrink-0 lg:w-96">
+            <div className="shrink-0 lg:w-96">
               <GardenSearch
                 onSearch={handleSearch}
                 isLoading={false}
@@ -217,7 +217,7 @@ function App() {
         </div>
 
         {/* Footer mit Hinweis zu Fehlern */}
-        <div className="flex-shrink-0 border-t border-scholle-border bg-scholle-bg-light px-4 py-2">
+        <div className="shrink-0 border-t border-scholle-border bg-scholle-bg-light px-4 py-2">
           <p className="text-xs text-scholle-text-light text-center">
             Fehler in der Karte? Bitte melden Sie diese an{" "}
             <a

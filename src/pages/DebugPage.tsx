@@ -264,7 +264,7 @@ export default function DebugPage() {
             <p className="text-scholle-text-light">Lade Daten...</p>
           </div>
         ) : (
-          <div className="bg-scholle-bg-container rounded-lg border border-scholle-border shadow-sm overflow-hidden">
+          <div className="bg-scholle-bg-container rounded-lg border border-scholle-border shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-scholle-green text-white">
