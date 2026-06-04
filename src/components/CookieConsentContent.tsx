@@ -9,12 +9,16 @@ interface CookieConsentContentProps {
   onConsentChange: (preferences: CookiePreferences) => void;
   initialGoogleMaps?: boolean | null;
   initialOpenStreetMap?: boolean | null;
+  // Inline-Variante (z.B. im Kartenbereich): ohne eigene Höhenbegrenzung/Scroll,
+  // damit der Inhalt natürlich fließt und die Seite scrollt (wichtig auf Mobil).
+  embedded?: boolean;
 }
 
 export default function CookieConsentContent({
   onConsentChange,
   initialGoogleMaps = null,
   initialOpenStreetMap = null,
+  embedded = false,
 }: CookieConsentContentProps) {
   const [googleMapsConsent, setGoogleMapsConsent] = useState<boolean | null>(initialGoogleMaps);
   const [openStreetMapConsent, setOpenStreetMapConsent] = useState<boolean | null>(
@@ -90,7 +94,13 @@ export default function CookieConsentContent({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div
+      className={
+        embedded
+          ? "bg-white rounded-lg shadow-lg w-full max-w-2xl"
+          : "bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+      }
+    >
       <div className="p-6">
         <h2 className="text-2xl font-bold text-scholle-text mb-4">Zugriff auf externe Server</h2>
 

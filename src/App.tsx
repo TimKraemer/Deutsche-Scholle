@@ -169,8 +169,12 @@ function App() {
             </div>
 
             {/* Karte */}
-            <div className="lg:col-span-2 flex flex-col min-h-0 overflow-hidden">
-              <div className="flex-1 min-h-[350px] lg:min-h-[350px] aspect-square lg:aspect-auto flex flex-col relative">
+            <div className="lg:col-span-2 flex flex-col min-h-0 lg:overflow-hidden">
+              <div
+                className={`flex-1 min-h-[350px] lg:min-h-[350px] lg:aspect-auto flex flex-col relative ${
+                  cookiePreferences.openStreetMap ? "aspect-square" : ""
+                }`}
+              >
                 {/* Graue Box als Platzhalter für die Karte */}
                 <div className="absolute inset-0 bg-scholle-border rounded-lg border border-scholle-border" />
 
@@ -190,10 +194,8 @@ function App() {
                     />
                   </Suspense>
                 ) : (
-                  <div className="relative z-10 w-full h-full flex items-center justify-center p-8">
-                    <div className="max-w-2xl w-full bg-scholle-bg-container rounded-lg shadow-lg border border-scholle-border">
-                      <CookieConsentContent onConsentChange={handleConsentChange} />
-                    </div>
+                  <div className="relative z-10 w-full lg:h-full flex items-center justify-center p-4 sm:p-8 lg:overflow-y-auto">
+                    <CookieConsentContent embedded onConsentChange={handleConsentChange} />
                   </div>
                 )}
               </div>
