@@ -461,17 +461,17 @@ export default function GardenPage() {
 
         {/* Footer mit Hinweis zu Fehlern */}
         <div className="shrink-0 border-t border-scholle-border bg-scholle-bg-light px-4 py-2">
-          <p className="text-xs text-scholle-text-light text-center">
-            Fehler in der Karte? Bitte melden Sie diese an{" "}
-            <a
-              href="mailto:scholle-map@tk22.de"
-              className="text-scholle-blue hover:text-scholle-blue-dark underline"
-            >
-              scholle-map@tk22.de
-            </a>{" "}
-            oder direkt beim Verein.
-          </p>
-          <p className="text-xs text-scholle-text-light text-center mt-1">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-scholle-text-light text-center">
+            <span>
+              Fehler in der Karte? Bitte melden Sie diese an{" "}
+              <a
+                href="mailto:scholle-map@tk22.de"
+                className="text-scholle-blue hover:text-scholle-blue-dark underline"
+              >
+                scholle-map@tk22.de
+              </a>{" "}
+              oder direkt beim Verein.
+            </span>
             <a
               href="https://github.com/TimKraemer/Deutsche-Scholle"
               target="_blank"
@@ -483,7 +483,7 @@ export default function GardenPage() {
               </svg>
               Quellcode auf GitHub
             </a>
-          </p>
+          </div>
         </div>
       </div>
     </>
