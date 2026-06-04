@@ -120,8 +120,33 @@ async function fetchOverpassAPI(
  * - allotments=plot mit name (Parzellen wie "Klostergärten 1")
  *
  * Die Hierarchie ist: Verein (landuse=allotments) > Parzelle (allotments=plot mit name) > Garten (allotments=plot mit ref)
+ *
+ * Caching: Das Ergebnis wird pro OSM Way ID gecacht (2 Stunden TTL), damit beim
+ * erneuten Öffnen desselben Gartens keine neue Overpass-Abfrage nötig ist.
+ * Netzwerkfehler werden NICHT gecacht, damit sie beim nächsten Versuch neu geladen werden.
  */
 export async function findEnclosingParcel(gardenWay: OSMWay): Promise<string | null> {
+  const cacheKey = CacheKeys.PARCEL(gardenWay.id);
+
+  // Prüfe zuerst den Cache. Das Ergebnis wird als Objekt gespeichert, damit auch
+  // ein gültiges "nicht gefunden" (null) von einem fehlenden Cache-Eintrag unterscheidbar ist.
+  const cached = getFromCache<{ parcel: string | null }>(cacheKey);
+  if (cached) {
+    return cached.parcel;
+  }
+
+  try {
+    const result = await computeEnclosingParcel(gardenWay);
+    // 2 Stunden TTL, konsistent mit searchGardenByNumber
+    setCache(cacheKey, { parcel: result }, 2 * 60 * 60 * 1000);
+    return result;
+  } catch {
+    // Netzwerkfehler nicht cachen, damit der nächste Versuch neu lädt
+    return null;
+  }
+}
+
+async function computeEnclosingParcel(gardenWay: OSMWay): Promise<string | null> {
   if (!gardenWay.geometry || gardenWay.geometry.length === 0) {
     return null;
   }
@@ -324,7 +349,8 @@ export async function findEnclosingParcel(gardenWay: OSMWay): Promise<string | n
     if (error.name !== "AbortError") {
       console.error("Error finding enclosing parcel:", error);
     }
-    return null;
+    // Fehler weiterreichen, damit der Wrapper sie nicht als Ergebnis cacht.
+    throw error;
   }
 }
 

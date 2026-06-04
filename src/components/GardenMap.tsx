@@ -360,6 +360,16 @@ export default function GardenMap({
   const [currentZoom, setCurrentZoom] = useState(INITIAL_MAP_ZOOM);
   const [mapType, setMapType] = useState<"osm" | "satellite" | "3d">(defaultMapType || "osm");
 
+  // Steuert, ob das Luftbild mit 3D-Neigung (Tilt 45°) oder flach (Tilt 0°, Top-Down)
+  // angezeigt wird. Wahl wird in localStorage gespeichert (konsistent mit Sortier-/Filter-Prefs).
+  const [is3DEnabled, setIs3DEnabled] = useState<boolean>(() => {
+    return localStorage.getItem("gardenMap3DEnabled") !== "false";
+  });
+  // Ref hält den aktuellen Wert, damit die Google-Maps-Init-Effekt-Closure nicht veraltet
+  // und der teure Karten-Aufbau nicht bei jedem Umschalten neu ausgeführt werden muss.
+  const is3DEnabledRef = useRef(is3DEnabled);
+  is3DEnabledRef.current = is3DEnabled;
+
   // Zeige Labels in OSM-Ansicht wenn Zoom hoch genug ist (auch auf Detailseite)
   const showLabels = currentZoom >= MIN_ZOOM_FOR_LABELS && mapType === "osm";
 
@@ -471,11 +481,23 @@ export default function GardenMap({
       setMapType("osm");
     }
   }, [disable3D, mapType]);
+
   const googleMap3DRef = useRef<HTMLDivElement | null>(null);
   const googleMapInstanceRef = useRef<any>(null);
   const googleMapPolygonRef = useRef<any>(null);
   const googleMapsScriptLoadedRef = useRef<boolean>(false);
   const mapWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Aktualisiere die Neigung der bereits erstellten Google-Maps-Instanz, wenn der Nutzer
+  // zwischen 3D (Tilt 45°) und flachem Luftbild (Tilt 0°) umschaltet, und persistiere die Wahl.
+  useEffect(() => {
+    localStorage.setItem("gardenMap3DEnabled", String(is3DEnabled));
+    const map = googleMapInstanceRef.current;
+    if (mapType === "3d" && map) {
+      map.setTilt(is3DEnabled ? GOOGLE_MAPS_CONFIG.TILT : 0);
+      map.setHeading(0);
+    }
+  }, [is3DEnabled, mapType]);
 
   // Stelle sicher, dass die Karte die volle Höhe des Parents nutzt
   useEffect(() => {
@@ -578,7 +600,7 @@ export default function GardenMap({
           : bounds.getCenter(),
         zoom: selectedGarden ? GOOGLE_MAPS_CONFIG.GARDEN_ZOOM : GOOGLE_MAPS_CONFIG.DEFAULT_ZOOM,
         mapTypeId: google.maps.MapTypeId.SATELLITE,
-        tilt: GOOGLE_MAPS_CONFIG.TILT,
+        tilt: is3DEnabledRef.current ? GOOGLE_MAPS_CONFIG.TILT : 0,
         heading: 0,
         mapTypeControl: false,
         streetViewControl: false,
@@ -693,7 +715,8 @@ export default function GardenMap({
       // - Tilt muss nach vollständigem Laden der Karte gesetzt werden
       // - Sonst wird 3D-Ansicht nicht korrekt aktiviert
       google.maps.event.addListenerOnce(map, "tilesloaded", () => {
-        map.setTilt(GOOGLE_MAPS_CONFIG.TILT);
+        map.setTilt(is3DEnabledRef.current ? GOOGLE_MAPS_CONFIG.TILT : 0);
+        map.setHeading(0);
       });
     };
 
@@ -786,8 +809,26 @@ export default function GardenMap({
                 : "bg-scholle-bg-light text-scholle-text hover:bg-scholle-border"
             }`}
           >
-            Luftbild (3D)
+            Luftbild
           </button>
+          {mapType === "3d" && (
+            <button
+              onClick={() => setIs3DEnabled((prev) => !prev)}
+              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                is3DEnabled
+                  ? "bg-scholle-green text-white"
+                  : "bg-scholle-bg-light text-scholle-text hover:bg-scholle-border"
+              }`}
+              title={
+                is3DEnabled
+                  ? "3D-Neigung deaktivieren (flaches Luftbild von oben)"
+                  : "3D-Neigung aktivieren (Schrägansicht)"
+              }
+              aria-pressed={is3DEnabled}
+            >
+              3D
+            </button>
+          )}
         </div>
       )}
 

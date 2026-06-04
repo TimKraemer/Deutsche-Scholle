@@ -55,13 +55,20 @@ export function hasGardenValue(value: GardenValue): boolean {
 }
 
 /**
- * Formatiert einen Garten-Wert als Währung oder als "n.V." (nach Vereinbarung).
+ * Volltext für den Sonderwert "nach Vereinbarung" (Daten-Sentinel ON_REQUEST = "n.V.").
+ */
+export const ON_REQUEST_LABEL = "nach Vereinbarung";
+
+/**
+ * Formatiert einen Garten-Wert als Währung oder als "nach Vereinbarung".
+ * Gibt für den Sonderwert "n.V." den ausgeschriebenen Text zurück, damit er
+ * verständlich ist (vor allem in der Detailansicht mit ausreichend Platz).
  */
 export function formatGardenValue(
   value: GardenValue,
   options?: { minimumFractionDigits?: number; maximumFractionDigits?: number }
 ): string {
-  return value === ON_REQUEST ? ON_REQUEST : formatCurrency(value, options);
+  return value === ON_REQUEST ? ON_REQUEST_LABEL : formatCurrency(value, options);
 }
 
 /**

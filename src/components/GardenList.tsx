@@ -323,10 +323,25 @@ export default function GardenList({
                         </div>
                         <div className="flex items-center gap-4 flex-wrap pt-1">
                           <span className="font-medium text-scholle-text">
-                            Wert: {formatGardenValue(garden.valuation)}
+                            Wert:{" "}
+                            {garden.valuation === ON_REQUEST ? (
+                              <span
+                                title="nach Vereinbarung"
+                                className="underline decoration-dotted cursor-help"
+                              >
+                                n.V.
+                              </span>
+                            ) : (
+                              formatGardenValue(garden.valuation)
+                            )}
                           </span>
                           {garden.valueReduction === ON_REQUEST ? (
-                            <span className="text-red-600 font-medium">n.V.</span>
+                            <span
+                              title="nach Vereinbarung"
+                              className="text-red-600 font-medium underline decoration-dotted cursor-help"
+                            >
+                              n.V.
+                            </span>
                           ) : garden.valueReduction > 0 ? (
                             <span className="text-red-600 font-medium">
                               -{formatCurrency(garden.valueReduction)}
