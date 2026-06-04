@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { CookieConsentRef } from "./components/CookieConsent";
 import CookieConsent from "./components/CookieConsent";
 import CookieConsentContent from "./components/CookieConsentContent";
 import GardenList from "./components/GardenList";
-import GardenMap from "./components/GardenMap";
 import GardenSearch from "./components/GardenSearch";
 import { findGardenByNumber, mockGardens } from "./data/mockGardens";
-import type { CookiePreferences } from "./types/cookies";
-import { loadCookiePreferences } from "./utils/cookies";
+import { useCookiePreferences } from "./hooks/useCookiePreferences";
+import type { Garden } from "./types/garden";
 import type { OSMWay } from "./utils/osm";
 import {
   loadAllGardens,
@@ -17,13 +16,13 @@ import {
   searchGardenByNumberWithUpdate,
 } from "./utils/osm";
 
+// Karte (Leaflet) lazy laden: schwerste Abhängigkeit, wird erst nach OSM-Zustimmung gerendert
+const GardenMap = lazy(() => import("./components/GardenMap"));
+
 function App() {
   const navigate = useNavigate();
+  const { cookiePreferences, handleConsentChange } = useCookiePreferences();
   const [allGardens, setAllGardens] = useState<OSMWay[]>([]);
-  const [cookiePreferences, setCookiePreferences] = useState<CookiePreferences>({
-    googleMaps: false,
-    openStreetMap: false,
-  });
   const [searchError, setSearchError] = useState<string | null>(null);
   const [hoveredGardenNumber, setHoveredGardenNumber] = useState<string | null>(null);
   const [filteredGardens, setFilteredGardens] = useState<Garden[]>([]);
@@ -32,22 +31,6 @@ function App() {
   const handleFilteredGardensChange = useCallback((gardens: Garden[]) => {
     setFilteredGardens(gardens);
   }, []);
-
-  // Lade initiale Cookie-Präferenzen beim Start
-  useEffect(() => {
-    const preferences = loadCookiePreferences();
-    setCookiePreferences(preferences);
-  }, []);
-
-  const handleConsentChange = useCallback(
-    (preferences: { googleMaps: boolean | null; openStreetMap: boolean | null }) => {
-      setCookiePreferences({
-        googleMaps: preferences.googleMaps === true,
-        openStreetMap: preferences.openStreetMap === true,
-      });
-    },
-    []
-  );
 
   // Lade alle Gärten nur wenn OSM-Zustimmung gegeben wurde
   // Warum Cookie-Check?
@@ -192,18 +175,20 @@ function App() {
                 <div className="absolute inset-0 bg-scholle-border rounded-lg border border-scholle-border" />
 
                 {cookiePreferences.openStreetMap ? (
-                  <GardenMap
-                    selectedGarden={null}
-                    osmGeometry={undefined}
-                    allGardens={allGardens}
-                    availableGardens={filteredGardens}
-                    hoveredGardenNumber={hoveredGardenNumber}
-                    onGardenHover={setHoveredGardenNumber}
-                    onGardenClick={handleGardenClick}
-                    cookiePreferences={cookiePreferences}
-                    onOpenCookieConsent={() => cookieConsentRef.current?.open()}
-                    disable3D={true}
-                  />
+                  <Suspense fallback={null}>
+                    <GardenMap
+                      selectedGarden={null}
+                      osmGeometry={undefined}
+                      allGardens={allGardens}
+                      availableGardens={filteredGardens}
+                      hoveredGardenNumber={hoveredGardenNumber}
+                      onGardenHover={setHoveredGardenNumber}
+                      onGardenClick={handleGardenClick}
+                      cookiePreferences={cookiePreferences}
+                      onOpenCookieConsent={() => cookieConsentRef.current?.open()}
+                      disable3D={true}
+                    />
+                  </Suspense>
                 ) : (
                   <div className="relative z-10 w-full h-full flex items-center justify-center p-8">
                     <div className="max-w-2xl w-full bg-scholle-bg-container rounded-lg shadow-lg border border-scholle-border">

@@ -1,5 +1,5 @@
 import type { Garden } from "../types/garden";
-import { formatCurrency, formatDate } from "../utils/formatting";
+import { formatDate, formatGardenValue, hasGardenValue } from "../utils/formatting";
 import GardenChecklist from "./GardenChecklist";
 
 interface GardenDetailsProps {
@@ -21,7 +21,10 @@ export default function GardenDetails({
   // ODER wenn garden existiert, aber keine Datenbankfelder gesetzt sind (availableFrom, valuation, etc.)
   const hasNoDetails =
     gardenNumber &&
-    (!garden || (!garden.availableFrom && garden.valuation === 0 && garden.valueReduction === 0));
+    (!garden ||
+      (!garden.availableFrom &&
+        !hasGardenValue(garden.valuation) &&
+        !hasGardenValue(garden.valueReduction)));
 
   if (!garden && !hasNoDetails) {
     return (
@@ -312,14 +315,14 @@ export default function GardenDetails({
             </div>
           )}
 
-          {(garden.valuation > 0 || garden.valueReduction > 0) && (
+          {(hasGardenValue(garden.valuation) || hasGardenValue(garden.valueReduction)) && (
             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-scholle-border">
               <div>
                 <label className="block text-sm font-semibold text-scholle-text-light mb-1 uppercase tracking-wide">
                   Wertermittlung
                 </label>
                 <p className="text-lg font-semibold text-scholle-text">
-                  {formatCurrency(garden.valuation)}
+                  {formatGardenValue(garden.valuation)}
                 </p>
               </div>
 
@@ -328,7 +331,7 @@ export default function GardenDetails({
                   Wertminderung
                 </label>
                 <p className="text-lg font-semibold text-red-600">
-                  {formatCurrency(garden.valueReduction)}
+                  {formatGardenValue(garden.valueReduction)}
                 </p>
               </div>
             </div>

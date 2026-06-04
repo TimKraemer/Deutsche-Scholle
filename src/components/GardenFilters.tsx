@@ -1,7 +1,7 @@
 import { Checkbox, FormControlLabel, Slider } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import type { Garden } from "../types/garden";
-import { formatCurrency } from "../utils/formatting";
+import { formatCurrency, gardenValueToNumber } from "../utils/formatting";
 import {
   applyGardenFilters,
   type FilterValues,
@@ -40,7 +40,7 @@ const calculateRanges = (gardens: Garden[]) => {
     };
   }
 
-  const prices = gardens.map((g) => g.valuation).filter((p) => p >= 0);
+  const prices = gardens.map((g) => gardenValueToNumber(g.valuation)).filter((p) => p >= 0);
   const sizes = gardens.map((g) => g.size).filter((s) => s > 0);
 
   // Echte Min/Max-Werte aus der Datenbank (für Slider-Grenzen)

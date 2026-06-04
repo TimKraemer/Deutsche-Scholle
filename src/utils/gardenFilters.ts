@@ -3,6 +3,7 @@
  * Wird sowohl auf der Startseite als auch auf der Detailseite verwendet
  */
 import type { Garden } from "../types/garden";
+import { gardenValueToNumber } from "./formatting";
 
 export interface FilterValues {
   minPrice: number;
@@ -19,8 +20,9 @@ export interface FilterValues {
  */
 export function applyGardenFilters(gardens: Garden[], filters: FilterValues): Garden[] {
   return gardens.filter((garden) => {
-    // Preis-Filter
-    if (garden.valuation < filters.minPrice || garden.valuation > filters.maxPrice) {
+    // Preis-Filter ("n.V." wird als 0 behandelt)
+    const price = gardenValueToNumber(garden.valuation);
+    if (price < filters.minPrice || price > filters.maxPrice) {
       return false;
     }
 

@@ -1,4 +1,5 @@
 import type { Garden } from "../types/garden";
+import { gardenValueToNumber } from "./formatting";
 
 export type SortOption = "number" | "availableFrom" | "size" | "valuation";
 export type SortDirection = "asc" | "desc";
@@ -9,7 +10,7 @@ export interface SortConfig {
 }
 
 // Hilfsfunktion zum Parsen des "Frei ab" Datums
-export const parseAvailableDate = (dateString: string): Date | null => {
+const parseAvailableDate = (dateString: string): Date | null => {
   if (!dateString) return null;
   const lowerCaseDate = dateString.toLowerCase();
   if (lowerCaseDate === "sofort" || lowerCaseDate === "ab sofort") {
@@ -42,7 +43,7 @@ export const sortGardens = (
     } else if (sortBy === "size") {
       comparison = a.size - b.size;
     } else if (sortBy === "valuation") {
-      comparison = a.valuation - b.valuation;
+      comparison = gardenValueToNumber(a.valuation) - gardenValueToNumber(b.valuation);
     } else {
       // Sortiere nach "Frei ab" Datum
       const dateA = parseAvailableDate(a.availableFrom);

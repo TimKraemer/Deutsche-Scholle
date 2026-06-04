@@ -1,28 +1,5 @@
 import type { Garden } from "../types/garden";
-import { CacheKeys, clearCache as clearOSMCache, getFromCache, setCache } from "./cache";
-
-/**
- * Leert den gesamten OSM-Cache
- * Wird für Debugging/Admin-Zwecke bereitgestellt, falls Cache manuell geleert werden muss
- * (z.B. wenn neue Daten in OSM hinzugefügt wurden und sofort sichtbar sein sollen)
- */
-export function clearCache(): void {
-  clearOSMCache();
-}
-
-/**
- * Leert den Cache für einen spezifischen Garten
- * Wird für Debugging/Admin-Zwecke bereitgestellt
- * @param gardenNumber Die Gartennummer
- */
-export function clearGardenCache(gardenNumber: string): void {
-  const cacheKey = CacheKeys.GARDEN(gardenNumber);
-  try {
-    localStorage.removeItem(`osm_cache_${cacheKey}`);
-  } catch (error) {
-    console.error("Error clearing garden cache:", error);
-  }
-}
+import { CacheKeys, getFromCache, setCache } from "./cache";
 
 // Liste von Overpass API Servern als Fallback
 // Mehrere Server werden verwendet, um Ausfälle einzelner Server abzufedern
@@ -44,7 +21,7 @@ export interface OSMWay {
   };
 }
 
-export interface OSMResponse {
+interface OSMResponse {
   elements: OSMWay[];
 }
 
@@ -131,95 +108,6 @@ async function fetchOverpassAPI(
 
   // Alle Server und Retries fehlgeschlagen
   throw lastError || new Error("Overpass API: All servers failed");
-}
-
-/**
- * Lädt einen Garten direkt über die OSM Way ID
- * Wird intern von loadGardenByWayIdWithUpdate verwendet und für zukünftige Erweiterungen bereitgestellt
- */
-export async function loadGardenByWayId(
-  wayId: number,
-  forceRefresh: boolean = false
-): Promise<OSMWay | null> {
-  const cacheKey = `garden_way_${wayId}`;
-  if (!forceRefresh) {
-    const cached = getFromCache<OSMWay>(cacheKey);
-    if (cached) {
-      return cached;
-    }
-  }
-
-  const query = `
-    [out:json][timeout:25];
-    (
-      way(${wayId});
-    );
-    out geom;
-  `;
-
-  try {
-    const response = await fetchOverpassAPI(query);
-
-    const data: OSMResponse = await response.json();
-
-    if (data.elements && data.elements.length > 0) {
-      const result = data.elements[0];
-      // 2 Stunden TTL für Way-ID Lookups
-      setCache(cacheKey, result, 2 * 60 * 60 * 1000);
-      return result;
-    }
-
-    return null;
-  } catch (error: any) {
-    if (error.name !== "AbortError") {
-      console.error("Error loading garden by way ID:", error);
-    }
-    const staleCache = getFromCache<OSMWay>(cacheKey);
-    if (staleCache) {
-      return staleCache;
-    }
-    return null;
-  }
-}
-
-/**
- * Hybrid-Ansatz: Gibt sofort gecachte Daten zurück und aktualisiert im Hintergrund
- * Wird für zukünftige Erweiterungen bereitgestellt (z.B. direkter Zugriff über Way ID)
- * @param wayId Die OSM Way ID
- * @param onUpdate Callback der aufgerufen wird, wenn neue Daten verfügbar sind
- * @returns Gecachte Daten (falls vorhanden) oder null
- */
-export function loadGardenByWayIdWithUpdate(
-  wayId: number,
-  onUpdate?: (garden: OSMWay | null) => void
-): OSMWay | null {
-  const cacheKey = `garden_way_${wayId}`;
-
-  // Gib sofort gecachte Daten zurück
-  const cached = getFromCache<OSMWay>(cacheKey);
-
-  // Starte Background-Update (nicht await, läuft parallel)
-  loadGardenByWayId(wayId, false)
-    .then((updatedGarden) => {
-      // Nur Callback aufrufen wenn sich Daten geändert haben
-      if (
-        updatedGarden &&
-        (!cached ||
-          cached.id !== updatedGarden.id ||
-          JSON.stringify(cached.geometry) !== JSON.stringify(updatedGarden.geometry))
-      ) {
-        onUpdate?.(updatedGarden);
-      } else if (!updatedGarden && cached) {
-        // Cache wurde gelöscht oder nicht gefunden
-        onUpdate?.(null);
-      }
-    })
-    .catch((error) => {
-      // Bei Fehler einfach ignorieren, Cache bleibt bestehen
-      console.error("Background update failed:", error);
-    });
-
-  return cached;
 }
 
 /**

@@ -1,10 +1,12 @@
-import { StrictMode } from "react";
+import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import "./index.css";
 import App from "./App.tsx";
-import DebugPage from "./pages/DebugPage.tsx";
-import GardenPage from "./pages/GardenPage.tsx";
+
+// Detail- und Debug-Seiten als eigene Chunks laden (kleinerer initialer Bundle)
+const DebugPage = lazy(() => import("./pages/DebugPage.tsx"));
+const GardenPage = lazy(() => import("./pages/GardenPage.tsx"));
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {
@@ -13,11 +15,13 @@ if (!rootElement) {
 createRoot(rootElement).render(
   <StrictMode>
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<App />} />
-        <Route path="/debug" element={<DebugPage />} />
-        <Route path="/:gardenNumber" element={<GardenPage />} />
-      </Routes>
+      <Suspense fallback={null}>
+        <Routes>
+          <Route path="/" element={<App />} />
+          <Route path="/debug" element={<DebugPage />} />
+          <Route path="/:gardenNumber" element={<GardenPage />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   </StrictMode>
 );

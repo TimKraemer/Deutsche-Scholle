@@ -163,7 +163,6 @@ src/
 │   ├── gardenFilters.ts # Filter-Logik
 │   ├── gardenSort.ts  # Sortier-Logik
 │   ├── mapHelpers.ts   # Karten-Hilfsfunktionen
-│   ├── imageUpscale.ts
 │   └── constants.ts    # Konstanten
 └── App.tsx             # Hauptkomponente
 ```

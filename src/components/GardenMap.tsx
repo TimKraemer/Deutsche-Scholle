@@ -429,7 +429,7 @@ export default function GardenMap({
         const osmGarden = osmGardenMap.get(garden.number);
 
         // Nur anzeigen wenn in OSM gefunden und Geometrie vorhanden
-        if (!osmGarden || !osmGarden.geometry || osmGarden.geometry.length === 0) {
+        if (!osmGarden?.geometry || osmGarden.geometry.length === 0) {
           return null;
         }
 

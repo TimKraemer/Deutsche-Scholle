@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { CookieConsentRef } from "../components/CookieConsent";
 import CookieConsent from "../components/CookieConsent";
 import GardenDetails from "../components/GardenDetails";
-import GardenMap from "../components/GardenMap";
 import { findGardenByNumber, mockGardens } from "../data/mockGardens";
-import type { CookiePreferences } from "../types/cookies";
+import { useCookiePreferences } from "../hooks/useCookiePreferences";
 import type { Garden } from "../types/garden";
-import { loadCookiePreferences } from "../utils/cookies";
+import { gardenValueToNumber } from "../utils/formatting";
 import {
   applyGardenFilters,
   hasActiveFilters,
@@ -27,6 +26,9 @@ import {
   searchGardenByNumber,
 } from "../utils/osm";
 
+// Karte (Leaflet) lazy laden: schwerste Abhängigkeit, getrennter Chunk
+const GardenMap = lazy(() => import("../components/GardenMap"));
+
 export default function GardenPage() {
   const { gardenNumber } = useParams<{ gardenNumber: string }>();
   const navigate = useNavigate();
@@ -38,10 +40,8 @@ export default function GardenPage() {
   const [osmParcel, setOsmParcel] = useState<string | null>(null);
   const [osmSize, setOsmSize] = useState<number | undefined>(undefined);
   const [hasOsmData, setHasOsmData] = useState<boolean>(false); // Track ob OSM-Daten vorhanden sind
-  const [cookiePreferences, setCookiePreferences] = useState<CookiePreferences>({
-    googleMaps: false,
-    openStreetMap: false,
-  });
+  const [osmLoading, setOsmLoading] = useState<boolean>(false); // OSM-Karte wird im Hintergrund geladen
+  const { cookiePreferences, handleConsentChange } = useCookiePreferences();
   // Lade Sortierung aus localStorage (synchronisiert mit Startseite)
   // Standardmäßig nach Nummer sortieren wenn keine gültige Einstellung gespeichert ist
   const [sortBy] = useState<SortOption>(() => {
@@ -88,7 +88,7 @@ export default function GardenPage() {
     }
 
     // Schritt 2: Berechne echte Min/Max-Werte aus der Datenbank
-    const prices = available.map((g) => g.valuation).filter((p) => p >= 0);
+    const prices = available.map((g) => gardenValueToNumber(g.valuation)).filter((p) => p >= 0);
     const sizes = available.map((g) => g.size).filter((s) => s > 0);
 
     const realMinPrice = Math.min(...prices, 0);
@@ -164,22 +164,6 @@ export default function GardenPage() {
       ? availableGardens[currentIndex + 1]
       : null;
 
-  // Lade initiale Cookie-Präferenzen beim Start
-  useEffect(() => {
-    const preferences = loadCookiePreferences();
-    setCookiePreferences(preferences);
-  }, []);
-
-  const handleConsentChange = (preferences: {
-    googleMaps: boolean | null;
-    openStreetMap: boolean | null;
-  }) => {
-    setCookiePreferences({
-      googleMaps: preferences.googleMaps === true,
-      openStreetMap: preferences.openStreetMap === true,
-    });
-  };
-
   // Lade alle Gärten nur wenn OSM-Zustimmung gegeben wurde
   useEffect(() => {
     if (!cookiePreferences.openStreetMap) {
@@ -199,36 +183,54 @@ export default function GardenPage() {
   }, [cookiePreferences.openStreetMap]);
 
   // Lade Garten basierend auf URL-Parameter
+  // Strategie: Datenbank-Daten SOFORT anzeigen, OSM-Karte im Hintergrund nachladen.
+  // Warum? Die Overpass-API kann mehrere Sekunden brauchen - das darf die Anzeige
+  // der bereits vorhandenen Gartendetails (Größe, Preis, Verfügbarkeit) nicht blockieren.
   useEffect(() => {
     if (!gardenNumber) {
       navigate("/");
       return;
     }
 
-    const loadGarden = async () => {
-      setIsLoading(true);
-      setError(null);
-      setSelectedGarden(null);
-      setOsmGeometry(undefined);
-      setHasOsmData(false);
+    // Verhindert State-Updates, wenn der Nutzer währenddessen zu einem anderen Garten wechselt
+    let cancelled = false;
 
+    // OSM-spezifische Daten beim Gartenwechsel zurücksetzen
+    setError(null);
+    setOsmGeometry(undefined);
+    setOsmParcel(null);
+    setOsmSize(undefined);
+    setHasOsmData(false);
+
+    // Datenbank-Daten sofort anzeigen (kein Warten auf das Netzwerk)
+    const mockGarden = findGardenByNumber(gardenNumber);
+    setSelectedGarden(mockGarden ?? null);
+
+    // Vollbild-Spinner nur, wenn wir keine Daten haben und auf OSM warten müssen
+    setIsLoading(!mockGarden && cookiePreferences.openStreetMap);
+
+    if (!cookiePreferences.openStreetMap) {
+      if (!mockGarden) {
+        setError(
+          `Garten mit Nummer "${gardenNumber}" nicht gefunden. Bitte aktivieren Sie OpenStreetMap in den Cookie-Einstellungen, um auch Gärten zu finden, die nur in OSM vorhanden sind.`
+        );
+      }
+      return;
+    }
+
+    // OSM-Anreicherung im Hintergrund (Karte, Umrisse, umschließende Parzelle)
+    setOsmLoading(true);
+
+    const enrichWithOsm = async () => {
       try {
-        // Zuerst in Mock-Daten suchen
-        const mockGarden = findGardenByNumber(gardenNumber);
-
-        // Dann in OpenStreetMap suchen (nur wenn Zustimmung gegeben)
-        const osmWay = cookiePreferences.openStreetMap
-          ? await searchGardenByNumber(gardenNumber)
-          : null;
+        const osmWay = await searchGardenByNumber(gardenNumber);
+        if (cancelled) return;
 
         if (osmWay) {
-          // Suche nach umschließender Parzelle
           const enclosingParcel = await findEnclosingParcel(osmWay);
+          if (cancelled) return;
+
           setOsmParcel(enclosingParcel);
-
-          // OSM-Größe wird später aus dem Garden-Objekt extrahiert
-
-          // Kombiniere OSM-Daten mit Mock-Daten
           const garden = osmWayToGarden(osmWay, mockGarden, enclosingParcel);
 
           if (garden) {
@@ -238,34 +240,32 @@ export default function GardenPage() {
               setOsmGeometry(osmWay.geometry);
               setHasOsmData(true);
             }
-          } else {
+          } else if (!mockGarden) {
             setError("Garten gefunden, aber Geometrie konnte nicht verarbeitet werden.");
           }
-        } else if (mockGarden) {
-          // Garten in DB, aber nicht in OSM gefunden
-          setSelectedGarden(mockGarden);
-          setHasOsmData(false);
-          // Kein Fehler setzen - Hinweis wird in der Karten-Box angezeigt
-        } else {
-          // Garten weder in Mock-Daten noch in OSM gefunden
-          // Aber wenn OSM-Zustimmung nicht gegeben ist, könnte der Garten trotzdem existieren
-          if (!cookiePreferences.openStreetMap) {
-            setError(
-              `Garten mit Nummer "${gardenNumber}" nicht gefunden. Bitte aktivieren Sie OpenStreetMap in den Cookie-Einstellungen, um auch Gärten zu finden, die nur in OSM vorhanden sind.`
-            );
-          } else {
-            setError(`Garten mit Nummer "${gardenNumber}" nicht gefunden.`);
-          }
+        } else if (!mockGarden) {
+          setError(`Garten mit Nummer "${gardenNumber}" nicht gefunden.`);
         }
       } catch (err) {
+        if (cancelled) return;
         console.error("Search error:", err);
-        setError("Fehler bei der Suche. Bitte versuchen Sie es erneut.");
+        // Fehler nur anzeigen, wenn keine Datenbank-Daten als Fallback vorliegen
+        if (!mockGarden) {
+          setError("Fehler bei der Suche. Bitte versuchen Sie es erneut.");
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+          setOsmLoading(false);
+        }
       }
     };
 
-    loadGarden();
+    enrichWithOsm();
+
+    return () => {
+      cancelled = true;
+    };
   }, [gardenNumber, navigate, cookiePreferences.openStreetMap]);
 
   const handleGardenClick = (number: string) => {
@@ -315,62 +315,75 @@ export default function GardenPage() {
         <div className="flex-1 flex flex-col px-4 pb-4 lg:min-h-0 lg:overflow-hidden">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:flex-1 lg:min-h-0 lg:overflow-hidden">
             <div className="lg:col-span-2 flex flex-col lg:min-h-0 lg:overflow-hidden">
-              {hasOsmData && osmGeometry ? (
-                <GardenMap
-                  selectedGarden={selectedGarden}
-                  osmGeometry={osmGeometry}
-                  allGardens={allGardens}
-                  availableGardens={availableGardens}
-                  onGardenClick={handleGardenClick}
-                  defaultMapType="3d"
-                  cookiePreferences={cookiePreferences}
-                  onOpenCookieConsent={() => cookieConsentRef.current?.open()}
-                  disable3D={selectedGarden === null}
-                />
-              ) : selectedGarden && !hasOsmData && cookiePreferences.openStreetMap ? (
-                <div className="flex-1 min-h-[350px] bg-scholle-bg-light rounded-lg border border-scholle-border flex items-center justify-center">
-                  <div className="bg-scholle-bg-container rounded-lg border border-scholle-border shadow-xs p-6 max-w-2xl w-full">
-                    <div className="flex items-start gap-4">
-                      <div className="shrink-0">
-                        <svg
-                          className="h-6 w-6 text-yellow-600"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-scholle-text mb-2">
-                          Kartenansicht nicht verfügbar
-                        </h3>
-                        <p className="text-base text-scholle-text-light">
-                          Die exakte Position von Garten {gardenNumber} wurde noch nicht auf der
-                          Karte eingezeichnet. Die Gartendetails können Sie rechts einsehen.
-                        </p>
+              <Suspense
+                fallback={
+                  <div className="flex-1 min-h-[350px] bg-scholle-bg-light rounded-lg border border-scholle-border" />
+                }
+              >
+                {hasOsmData && osmGeometry ? (
+                  <GardenMap
+                    selectedGarden={selectedGarden}
+                    osmGeometry={osmGeometry}
+                    allGardens={allGardens}
+                    availableGardens={availableGardens}
+                    onGardenClick={handleGardenClick}
+                    defaultMapType="3d"
+                    cookiePreferences={cookiePreferences}
+                    onOpenCookieConsent={() => cookieConsentRef.current?.open()}
+                    disable3D={selectedGarden === null}
+                  />
+                ) : osmLoading ? (
+                  <div className="flex-1 min-h-[350px] bg-scholle-bg-light rounded-lg border border-scholle-border flex items-center justify-center">
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-scholle-green mx-auto mb-3" />
+                      <p className="text-scholle-text-light text-sm">Karte wird geladen…</p>
+                    </div>
+                  </div>
+                ) : selectedGarden && !hasOsmData && cookiePreferences.openStreetMap ? (
+                  <div className="flex-1 min-h-[350px] bg-scholle-bg-light rounded-lg border border-scholle-border flex items-center justify-center">
+                    <div className="bg-scholle-bg-container rounded-lg border border-scholle-border shadow-xs p-6 max-w-2xl w-full">
+                      <div className="flex items-start gap-4">
+                        <div className="shrink-0">
+                          <svg
+                            className="h-6 w-6 text-yellow-600"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold text-scholle-text mb-2">
+                            Kartenansicht nicht verfügbar
+                          </h3>
+                          <p className="text-base text-scholle-text-light">
+                            Die exakte Position von Garten {gardenNumber} wurde noch nicht auf der
+                            Karte eingezeichnet. Die Gartendetails können Sie rechts einsehen.
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <GardenMap
-                  selectedGarden={selectedGarden}
-                  osmGeometry={osmGeometry}
-                  allGardens={allGardens}
-                  availableGardens={availableGardens}
-                  onGardenClick={handleGardenClick}
-                  defaultMapType="3d"
-                  cookiePreferences={cookiePreferences}
-                  onOpenCookieConsent={() => cookieConsentRef.current?.open()}
-                  disable3D={selectedGarden === null}
-                />
-              )}
+                ) : (
+                  <GardenMap
+                    selectedGarden={selectedGarden}
+                    osmGeometry={osmGeometry}
+                    allGardens={allGardens}
+                    availableGardens={availableGardens}
+                    onGardenClick={handleGardenClick}
+                    defaultMapType="3d"
+                    cookiePreferences={cookiePreferences}
+                    onOpenCookieConsent={() => cookieConsentRef.current?.open()}
+                    disable3D={selectedGarden === null}
+                  />
+                )}
+              </Suspense>
             </div>
 
             <div className="lg:col-span-1 shrink-0 relative z-10 flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">

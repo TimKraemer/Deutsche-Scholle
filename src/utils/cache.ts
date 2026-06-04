@@ -105,22 +105,6 @@ function clearExpiredCache(): void {
 }
 
 /**
- * Entfernt alle Cache-Einträge
- */
-export function clearCache(): void {
-  try {
-    const keys = Object.keys(localStorage);
-    for (const key of keys) {
-      if (key.startsWith(CACHE_PREFIX)) {
-        localStorage.removeItem(key);
-      }
-    }
-  } catch (error) {
-    console.error("Error clearing cache:", error);
-  }
-}
-
-/**
  * Cache-Keys
  */
 export const CacheKeys = {

@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { LAST_DB_UPDATE } from "../data/mockGardens";
 import type { Garden } from "../types/garden";
-import { formatCurrency, formatDate, formatLastUpdate } from "../utils/formatting";
+import { ON_REQUEST } from "../types/garden";
+import {
+  formatCurrency,
+  formatDate,
+  formatGardenValue,
+  formatLastUpdate,
+} from "../utils/formatting";
 import {
   filterAvailableGardens,
   type SortConfig,
@@ -44,7 +50,8 @@ export default function GardenList({
   const handleSortChange = (newField: SortOption) => {
     setSortConfig((prev) => {
       // Wenn dasselbe Feld angeklickt wird, wechsle die Richtung
-      const newDirection = prev.field === newField && prev.direction === "asc" ? "desc" : "asc";
+      const newDirection: SortDirection =
+        prev.field === newField && prev.direction === "asc" ? "desc" : "asc";
       const newConfig = { field: newField, direction: newDirection };
       localStorage.setItem("gardenSortBy", newField);
       localStorage.setItem("gardenSortDirection", newDirection);
@@ -316,13 +323,15 @@ export default function GardenList({
                         </div>
                         <div className="flex items-center gap-4 flex-wrap pt-1">
                           <span className="font-medium text-scholle-text">
-                            Wert: {formatCurrency(garden.valuation)}
+                            Wert: {formatGardenValue(garden.valuation)}
                           </span>
-                          {garden.valueReduction > 0 && (
+                          {garden.valueReduction === ON_REQUEST ? (
+                            <span className="text-red-600 font-medium">n.V.</span>
+                          ) : garden.valueReduction > 0 ? (
                             <span className="text-red-600 font-medium">
                               -{formatCurrency(garden.valueReduction)}
                             </span>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     </div>

@@ -1,6 +1,7 @@
 /**
  * Shared formatting utilities
  */
+import { type GardenValue, ON_REQUEST } from "../types/garden";
 
 /**
  * Formats a date string to German locale format
@@ -36,6 +37,31 @@ export function formatCurrency(
     minimumFractionDigits: options?.minimumFractionDigits ?? 0,
     maximumFractionDigits: options?.maximumFractionDigits ?? 0,
   }).format(amount);
+}
+
+/**
+ * Wandelt einen Garten-Wert in eine Zahl um (für Sortierung, Filter, Vergleiche).
+ * "n.V." (nach Vereinbarung) wird als 0 / unbekannt behandelt.
+ */
+export function gardenValueToNumber(value: GardenValue): number {
+  return value === ON_REQUEST ? 0 : value;
+}
+
+/**
+ * Prüft, ob ein Garten-Wert gesetzt ist (positiver Betrag oder "n.V.").
+ */
+export function hasGardenValue(value: GardenValue): boolean {
+  return value === ON_REQUEST || value > 0;
+}
+
+/**
+ * Formatiert einen Garten-Wert als Währung oder als "n.V." (nach Vereinbarung).
+ */
+export function formatGardenValue(
+  value: GardenValue,
+  options?: { minimumFractionDigits?: number; maximumFractionDigits?: number }
+): string {
+  return value === ON_REQUEST ? ON_REQUEST : formatCurrency(value, options);
 }
 
 /**

@@ -27,12 +27,3 @@ export function loadCookiePreferences(): CookiePreferences {
     openStreetMap: savedOSM === "true",
   };
 }
-
-/**
- * Checks if cookie preferences have been set
- */
-export function hasCookiePreferences(): boolean {
-  const googleMaps = getCookie("cookie_consent_google_maps");
-  const osm = getCookie("cookie_consent_openstreetmap");
-  return googleMaps !== null && osm !== null;
-}
