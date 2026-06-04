@@ -53,16 +53,27 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    # Gehashte Assets aggressiv und unveraenderlich cachen
     location /assets/ {
         expires 1y;
         add_header Cache-Control "public, immutable";
         try_files $uri =404;
     }
 
+    # HTML/SPA-Einstiegspunkt nie hart cachen, damit nach einem Deploy
+    # immer die aktuellen Asset-Hashes geladen werden (Revalidierung via ETag).
+    # Ohne dies cachen Browser index.html heuristisch und zeigen alte Builds.
     location / {
         try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache" always;
     }
 }
+```
+
+After editing this config on the server, reload nginx (the config is bind-mounted, no restart needed):
+
+```bash
+ssh scortex-vm 'docker exec scholle-nginx nginx -t && docker exec scholle-nginx nginx -s reload'
 ```
 
 - `/opt/services/scholle.yaml` — compose service joined to the proxy network. Host port
