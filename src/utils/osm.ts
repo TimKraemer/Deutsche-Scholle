@@ -70,25 +70,27 @@ async function fetchOverpassAPI(
           return response;
         }
 
-        // Bei 504 Gateway Timeout oder 503 Service Unavailable: Retry mit Exponential Backoff
-        // Diese Fehler deuten auf temporäre Überlastung hin, nicht auf dauerhafte Probleme
-        if (response.status === 504 || response.status === 503) {
-          if (attempt < maxRetries - 1) {
-            // Exponential Backoff: Verhindert, dass wir den Server weiter überlasten
-            const delay = retryDelay * 2 ** attempt;
-            await new Promise((resolve) => setTimeout(resolve, delay));
-            continue;
-          }
-        }
-
-        // Bei anderen HTTP-Fehlern: Versuche nächsten Server
-        // (z.B. 404 = Query-Syntaxfehler, sollte nicht retried werden)
-        if (response.status !== 504 && response.status !== 503) {
-          lastError = new Error(`Overpass API error: ${response.status} ${response.statusText}`);
-          break; // Versuche nächsten Server
-        }
-
         lastError = new Error(`Overpass API error: ${response.status} ${response.statusText}`);
+
+        // Temporäre Fehler mit Retry + Backoff behandeln:
+        // - 429 Too Many Requests: Rate-Limit (Overpass hat strikte Limits)
+        // - 503 Service Unavailable / 504 Gateway Timeout: temporäre Überlastung
+        const isTransient =
+          response.status === 429 || response.status === 503 || response.status === 504;
+
+        if (isTransient && attempt < maxRetries - 1) {
+          // Respektiere Retry-After Header (Sekunden), sonst Exponential Backoff.
+          // Wichtig bei 429, da der Server explizit mitteilt, wie lange zu warten ist.
+          const retryAfter = Number(response.headers.get("Retry-After"));
+          const backoff = retryDelay * 2 ** attempt;
+          const delay = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : backoff;
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+
+        // Retries erschöpft oder nicht-temporärer Fehler (z.B. 400/404 Query-Syntax):
+        // diesen Server aufgeben und den nächsten Fallback-Server versuchen.
+        break;
       } catch (error: any) {
         // Bei AbortError (Timeout), versuche Retry
         if (error.name === "AbortError" && attempt < maxRetries - 1) {

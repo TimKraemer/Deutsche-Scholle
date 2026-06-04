@@ -715,7 +715,9 @@ export default function GardenMap({
 
     if (!googleMapsScriptLoadedRef.current && !isGoogleMapsReady() && !existingScript) {
       const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=geometry&loading=async&callback=${callbackName}`;
+      // v=quarterly: stabiler Release-Kanal. Der Standard-Kanal "weekly" verursacht
+      // gelegentlich transiente Loader-Fehler ("Could not load \"controls\"").
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&v=quarterly&libraries=geometry&loading=async&callback=${callbackName}`;
       script.async = true;
       script.defer = true;
       script.onerror = () => {
