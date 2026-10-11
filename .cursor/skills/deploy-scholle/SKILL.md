@@ -32,6 +32,9 @@ the new files are live immediately after rsync.
 
 - [ ] Working tree is clean / changes are committed (deploy ships the local build, not git HEAD).
 - [ ] `bun run build` succeeds (it runs `tsc -b` first, so type errors block the deploy).
+- [ ] The build first runs `bun run osm:update`, which refreshes `public/osm-gardens.json` from
+      Overpass. If it prints "OSM-Snapshot nicht aktualisiert", the old snapshot ships; rerun
+      `bun run osm:update` later if fresh OSM edits should go live. Commit the updated snapshot.
 - [ ] Then run the rsync + verify steps above.
 
 ## Infrastructure (reference — one-time setup, already done)

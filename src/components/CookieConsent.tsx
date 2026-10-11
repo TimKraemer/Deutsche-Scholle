@@ -8,6 +8,8 @@ interface CookiePreferences {
 
 interface CookieConsentProps {
   onConsentChange: (preferences: CookiePreferences) => void;
+  // Dialog sofort öffnen, wenn noch keine Entscheidung gespeichert ist (z.B. bei Direktlinks)
+  openWhenUndecided?: boolean;
 }
 
 export interface CookieConsentRef {
@@ -15,7 +17,7 @@ export interface CookieConsentRef {
 }
 
 const CookieConsent = forwardRef<CookieConsentRef, CookieConsentProps>(
-  ({ onConsentChange }, ref) => {
+  ({ onConsentChange, openWhenUndecided = false }, ref) => {
     const [showBanner, setShowBanner] = useState(false);
     const [googleMapsConsent, setGoogleMapsConsent] = useState<boolean | null>(null);
     const [openStreetMapConsent, setOpenStreetMapConsent] = useState<boolean | null>(null);
@@ -52,6 +54,9 @@ const CookieConsent = forwardRef<CookieConsentRef, CookieConsentProps>(
         // Setze initiale Werte auf null wenn noch keine Zustimmung vorhanden
         setGoogleMapsConsent(null);
         setOpenStreetMapConsent(null);
+        if (openWhenUndecided) {
+          setShowBanner(true);
+        }
       }
     }, []);
 

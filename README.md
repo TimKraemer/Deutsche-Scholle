@@ -53,7 +53,7 @@ Die Anwendung nutzt einen ausgeklügelten Algorithmus, um automatisch die richti
 - **Karten**: Leaflet & React-Leaflet für OSM-Karten
 - **3D-Visualisierung**: Google Maps API für Satellitenansicht
 - **Routing**: React Router DOM
-- **Datenquelle**: OpenStreetMap Overpass API
+- **Datenquelle**: OpenStreetMap (Snapshot aus der Overpass API, beim Build erzeugt)
 - **Code Quality**: Biome (Linter & Formatter), TypeScript strict mode
 
 ## 📋 Features im Detail
@@ -133,6 +133,13 @@ bun run build
 
 Die gebauten Dateien befinden sich im `dist/` Verzeichnis.
 
+Der Build ruft vorher `bun run osm:update` auf. Das Skript holt Gärten und Parzellen mit einer
+einzigen Overpass-Abfrage und schreibt sie nach `public/osm-gardens.json`. Die App lädt diese
+Datei vom eigenen Server, statt bei jedem Seitenaufruf auf die öffentlichen Overpass-Server zu
+warten (die regelmäßig 500/504 liefern oder hängen). Ist Overpass beim Build nicht erreichbar,
+bleibt der vorhandene Snapshot erhalten. Ist der Stand älter als 12 Stunden, aktualisiert der
+Browser ihn einmal im Hintergrund und merkt sich das Ergebnis im localStorage.
+
 ## 📁 Projektstruktur
 
 ```
@@ -156,7 +163,7 @@ src/
 │   ├── garden.ts
 │   └── cookies.ts
 ├── utils/              # Utility-Funktionen
-│   ├── osm.ts          # OSM API Integration
+│   ├── osm.ts          # OSM-Daten (Snapshot, Overpass, Parzellenerkennung)
 │   ├── cache.ts        # Caching-Logik
 │   ├── cookies.ts      # Cookie-Verwaltung
 │   ├── formatting.ts   # Formatierungsfunktionen

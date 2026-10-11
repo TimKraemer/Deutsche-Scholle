@@ -4,7 +4,7 @@ import { mockGardens } from "../data/mockGardens";
 import type { CookiePreferences } from "../types/cookies";
 import { CacheKeys, getFromCache, setCache } from "../utils/cache";
 import { loadCookiePreferences } from "../utils/cookies";
-import { loadAllGardens, osmWayToGarden, searchGardenByNumber } from "../utils/osm";
+import { getGardenData, osmWayToGarden, refreshGardenData } from "../utils/osm";
 
 interface GardenSizeComparison {
   number: string;
@@ -84,14 +84,14 @@ export default function DebugPage() {
   }, []);
 
   // Berechnet die komplette Auswertung neu (lädt OSM-Daten).
-  // forceRefresh=true umgeht den OSM-Cache und holt frische Daten.
+  // forceRefresh=true holt frische Daten direkt von Overpass statt aus dem Snapshot.
   const computeResults = useCallback(async (forceRefresh: boolean): Promise<DebugResults> => {
     const results: GardenSizeComparison[] = [];
 
-    // Lade alle Gärten aus OSM für bessere Performance
     let allOsmGardens: any[] = [];
     try {
-      allOsmGardens = await loadAllGardens(forceRefresh);
+      const data = forceRefresh ? await refreshGardenData() : await getGardenData();
+      allOsmGardens = data.gardens;
     } catch (error) {
       console.error("Error loading all gardens:", error);
     }
@@ -185,60 +185,15 @@ export default function DebugPage() {
           });
         }
       } else {
-        // Fallback: Versuche einzelne Suche
-        try {
-          const singleOsmWay = await searchGardenByNumber(mockGarden.number, forceRefresh);
-          if (singleOsmWay) {
-            const garden = osmWayToGarden(singleOsmWay, mockGarden);
-
-            if (garden && garden.osmSize !== undefined && garden.osmSize !== null) {
-              const osmSize = garden.osmSize;
-              const difference = osmSize - dbSize;
-              const percentageDiff = dbSize > 0 ? (difference / dbSize) * 100 : null;
-
-              results.push({
-                number: mockGarden.number,
-                dbSize,
-                osmSize,
-                difference,
-                percentageDiff,
-                hasOsmData: true,
-                parcel: mockGarden.parcel || "-",
-              });
-            } else {
-              results.push({
-                number: mockGarden.number,
-                dbSize,
-                osmSize: null,
-                difference: null,
-                percentageDiff: null,
-                hasOsmData: false,
-                parcel: mockGarden.parcel || "-",
-              });
-            }
-          } else {
-            results.push({
-              number: mockGarden.number,
-              dbSize,
-              osmSize: null,
-              difference: null,
-              percentageDiff: null,
-              hasOsmData: false,
-              parcel: mockGarden.parcel || "-",
-            });
-          }
-        } catch (error) {
-          console.error(`Error loading garden ${mockGarden.number}:`, error);
-          results.push({
-            number: mockGarden.number,
-            dbSize,
-            osmSize: null,
-            difference: null,
-            percentageDiff: null,
-            hasOsmData: false,
-            parcel: mockGarden.parcel || "-",
-          });
-        }
+        results.push({
+          number: mockGarden.number,
+          dbSize,
+          osmSize: null,
+          difference: null,
+          percentageDiff: null,
+          hasOsmData: false,
+          parcel: mockGarden.parcel || "-",
+        });
       }
     }
 

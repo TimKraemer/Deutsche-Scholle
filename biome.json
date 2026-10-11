@@ -7,7 +7,15 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**", "!**/dist", "!**/node_modules", "!**/.next", "!**/build", "!**/coverage"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/.next",
+      "!**/build",
+      "!**/coverage",
+      "!public/osm-gardens.json"
+    ]
   },
   "formatter": {
     "enabled": true,

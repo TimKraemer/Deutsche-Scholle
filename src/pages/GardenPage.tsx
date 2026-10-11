@@ -5,6 +5,7 @@ import CookieConsent from "../components/CookieConsent";
 import GardenDetails from "../components/GardenDetails";
 import { findGardenByNumber, mockGardens } from "../data/mockGardens";
 import { useCookiePreferences } from "../hooks/useCookiePreferences";
+import { useGardenData } from "../hooks/useGardenData";
 import type { Garden } from "../types/garden";
 import { gardenValueToNumber } from "../utils/formatting";
 import {
@@ -18,13 +19,7 @@ import {
   type SortOption,
   sortGardens,
 } from "../utils/gardenSort";
-import type { OSMWay } from "../utils/osm";
-import {
-  findEnclosingParcel,
-  loadAllGardensWithUpdate,
-  osmWayToGarden,
-  searchGardenByNumber,
-} from "../utils/osm";
+import { findOsmGarden, osmWayToGarden } from "../utils/osm";
 
 // Karte (Leaflet) lazy laden: schwerste Abhängigkeit, getrennter Chunk
 const GardenMap = lazy(() => import("../components/GardenMap"));
@@ -32,16 +27,49 @@ const GardenMap = lazy(() => import("../components/GardenMap"));
 export default function GardenPage() {
   const { gardenNumber } = useParams<{ gardenNumber: string }>();
   const navigate = useNavigate();
-  const [selectedGarden, setSelectedGarden] = useState<Garden | null>(null);
-  const [osmGeometry, setOsmGeometry] = useState<Array<{ lat: number; lon: number }> | undefined>();
-  const [allGardens, setAllGardens] = useState<OSMWay[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [osmParcel, setOsmParcel] = useState<string | null>(null);
-  const [osmSize, setOsmSize] = useState<number | undefined>(undefined);
-  const [hasOsmData, setHasOsmData] = useState<boolean>(false); // Track ob OSM-Daten vorhanden sind
-  const [osmLoading, setOsmLoading] = useState<boolean>(false); // OSM-Karte wird im Hintergrund geladen
   const { cookiePreferences, handleConsentChange } = useCookiePreferences();
+  const {
+    gardenData,
+    allGardens,
+    isLoading: osmLoading,
+    hasError: osmError,
+  } = useGardenData(cookiePreferences.openStreetMap);
+
+  // Datenbank-Daten stehen sofort bereit, OSM-Daten (Umriss, Parzelle) kommen aus dem
+  // Snapshot dazu. Alles wird synchron abgeleitet, es gibt keine eigene Abfrage pro Garten.
+  const mockGarden = useMemo(
+    () => (gardenNumber ? (findGardenByNumber(gardenNumber) ?? null) : null),
+    [gardenNumber]
+  );
+  const osmWay = useMemo(
+    () => (gardenData && gardenNumber ? findOsmGarden(gardenData, gardenNumber) : null),
+    [gardenData, gardenNumber]
+  );
+  const osmParcel = (osmWay && gardenData?.parcels[osmWay.id]) || null;
+  const osmGarden = useMemo(
+    () => (osmWay ? osmWayToGarden(osmWay, mockGarden ?? undefined, osmParcel) : null),
+    [osmWay, mockGarden, osmParcel]
+  );
+  const selectedGarden: Garden | null = osmGarden ?? mockGarden;
+  const hasOsmData = osmGarden !== null;
+  const osmGeometry = hasOsmData ? osmWay?.geometry : undefined;
+  const osmSize = osmGarden?.osmSize;
+
+  // Vollbild-Spinner nur, wenn wir keine Datenbank-Daten haben und auf OSM warten müssen
+  const isLoading = !mockGarden && osmLoading;
+
+  let error: string | null = null;
+  if (!mockGarden) {
+    if (!cookiePreferences.openStreetMap) {
+      error = `Garten mit Nummer "${gardenNumber}" nicht gefunden. Bitte aktivieren Sie OpenStreetMap in den Cookie-Einstellungen, um auch Gärten zu finden, die nur in OSM vorhanden sind.`;
+    } else if (osmError) {
+      error = "Fehler beim Laden der Kartendaten. Bitte versuchen Sie es erneut.";
+    } else if (gardenData && !osmWay) {
+      error = `Garten mit Nummer "${gardenNumber}" nicht gefunden.`;
+    } else if (osmWay && !osmGarden) {
+      error = "Garten gefunden, aber Geometrie konnte nicht verarbeitet werden.";
+    }
+  }
   // Lade Sortierung aus localStorage (synchronisiert mit Startseite)
   // Standardmäßig nach Nummer sortieren wenn keine gültige Einstellung gespeichert ist
   const [sortBy] = useState<SortOption>(() => {
@@ -164,109 +192,11 @@ export default function GardenPage() {
       ? availableGardens[currentIndex + 1]
       : null;
 
-  // Lade alle Gärten nur wenn OSM-Zustimmung gegeben wurde
-  useEffect(() => {
-    if (!cookiePreferences.openStreetMap) {
-      return;
-    }
-
-    // Hybrid-Ansatz: Zeige sofort gecachte Daten, aktualisiere im Hintergrund
-    const cachedGardens = loadAllGardensWithUpdate((updatedGardens) => {
-      // Callback wird aufgerufen wenn neue Daten verfügbar sind
-      setAllGardens(updatedGardens);
-    });
-
-    // Setze sofort gecachte Daten (falls vorhanden)
-    if (cachedGardens.length > 0) {
-      setAllGardens(cachedGardens);
-    }
-  }, [cookiePreferences.openStreetMap]);
-
-  // Lade Garten basierend auf URL-Parameter
-  // Strategie: Datenbank-Daten SOFORT anzeigen, OSM-Karte im Hintergrund nachladen.
-  // Warum? Die Overpass-API kann mehrere Sekunden brauchen - das darf die Anzeige
-  // der bereits vorhandenen Gartendetails (Größe, Preis, Verfügbarkeit) nicht blockieren.
   useEffect(() => {
     if (!gardenNumber) {
       navigate("/");
-      return;
     }
-
-    // Verhindert State-Updates, wenn der Nutzer währenddessen zu einem anderen Garten wechselt
-    let cancelled = false;
-
-    // OSM-spezifische Daten beim Gartenwechsel zurücksetzen
-    setError(null);
-    setOsmGeometry(undefined);
-    setOsmParcel(null);
-    setOsmSize(undefined);
-    setHasOsmData(false);
-
-    // Datenbank-Daten sofort anzeigen (kein Warten auf das Netzwerk)
-    const mockGarden = findGardenByNumber(gardenNumber);
-    setSelectedGarden(mockGarden ?? null);
-
-    // Vollbild-Spinner nur, wenn wir keine Daten haben und auf OSM warten müssen
-    setIsLoading(!mockGarden && cookiePreferences.openStreetMap);
-
-    if (!cookiePreferences.openStreetMap) {
-      if (!mockGarden) {
-        setError(
-          `Garten mit Nummer "${gardenNumber}" nicht gefunden. Bitte aktivieren Sie OpenStreetMap in den Cookie-Einstellungen, um auch Gärten zu finden, die nur in OSM vorhanden sind.`
-        );
-      }
-      return;
-    }
-
-    // OSM-Anreicherung im Hintergrund (Karte, Umrisse, umschließende Parzelle)
-    setOsmLoading(true);
-
-    const enrichWithOsm = async () => {
-      try {
-        const osmWay = await searchGardenByNumber(gardenNumber);
-        if (cancelled) return;
-
-        if (osmWay) {
-          const enclosingParcel = await findEnclosingParcel(osmWay);
-          if (cancelled) return;
-
-          setOsmParcel(enclosingParcel);
-          const garden = osmWayToGarden(osmWay, mockGarden, enclosingParcel);
-
-          if (garden) {
-            setSelectedGarden(garden);
-            setOsmSize(garden.osmSize);
-            if (osmWay.geometry) {
-              setOsmGeometry(osmWay.geometry);
-              setHasOsmData(true);
-            }
-          } else if (!mockGarden) {
-            setError("Garten gefunden, aber Geometrie konnte nicht verarbeitet werden.");
-          }
-        } else if (!mockGarden) {
-          setError(`Garten mit Nummer "${gardenNumber}" nicht gefunden.`);
-        }
-      } catch (err) {
-        if (cancelled) return;
-        console.error("Search error:", err);
-        // Fehler nur anzeigen, wenn keine Datenbank-Daten als Fallback vorliegen
-        if (!mockGarden) {
-          setError("Fehler bei der Suche. Bitte versuchen Sie es erneut.");
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-          setOsmLoading(false);
-        }
-      }
-    };
-
-    enrichWithOsm();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [gardenNumber, navigate, cookiePreferences.openStreetMap]);
+  }, [gardenNumber, navigate]);
 
   const handleGardenClick = (number: string) => {
     navigate(`/${number}`);
@@ -285,7 +215,11 @@ export default function GardenPage() {
 
   return (
     <>
-      <CookieConsent ref={cookieConsentRef} onConsentChange={handleConsentChange} />
+      <CookieConsent
+        ref={cookieConsentRef}
+        onConsentChange={handleConsentChange}
+        openWhenUndecided
+      />
       <div className="min-h-screen bg-scholle-bg flex flex-col lg:h-screen lg:overflow-hidden">
         <div className="container mx-auto px-4 py-4 shrink-0">
           <header className="mb-4">
@@ -363,9 +297,10 @@ export default function GardenPage() {
                             Kartenansicht nicht verfügbar
                           </h3>
                           <p className="text-base text-scholle-text-light">
-                            Die exakte Position von Garten {gardenNumber} wurde noch nicht auf der
-                            Karte eingezeichnet. Die Gartendetails können Sie{" "}
-                            <span className="lg:hidden">unten</span>
+                            {osmError
+                              ? "Die Kartendaten konnten gerade nicht geladen werden."
+                              : `Die exakte Position von Garten ${gardenNumber} wurde noch nicht auf der Karte eingezeichnet.`}{" "}
+                            Die Gartendetails können Sie <span className="lg:hidden">unten</span>
                             <span className="hidden lg:inline">rechts</span> einsehen.
                           </p>
                         </div>

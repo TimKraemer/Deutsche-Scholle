@@ -358,7 +358,22 @@ export default function GardenMap({
   disable3D = false,
 }: GardenMapProps) {
   const [currentZoom, setCurrentZoom] = useState(INITIAL_MAP_ZOOM);
-  const [mapType, setMapType] = useState<"osm" | "satellite" | "3d">(defaultMapType || "osm");
+  // Luftbild nur als Standard, wenn Google Maps erlaubt ist. Sonst sähe man statt der Karte
+  // nur den Zustimmungs-Hinweis, obwohl die OSM-Karte verfügbar wäre.
+  const preferredMapType =
+    defaultMapType === "3d" && !cookiePreferences.googleMaps ? "osm" : defaultMapType;
+  const [mapType, setMapType] = useState<"osm" | "satellite" | "3d">(preferredMapType);
+  // Folgt dem Standard nur, solange der Nutzer nicht selbst umgeschaltet hat
+  const userPickedMapTypeRef = useRef(false);
+  useEffect(() => {
+    if (!userPickedMapTypeRef.current) {
+      setMapType(preferredMapType);
+    }
+  }, [preferredMapType]);
+  const selectMapType = (type: "osm" | "3d") => {
+    userPickedMapTypeRef.current = true;
+    setMapType(type);
+  };
 
   // Steuert, ob das Luftbild mit 3D-Neigung (Tilt 45°) oder flach (Tilt 0°, Top-Down)
   // angezeigt wird. Wahl wird in localStorage gespeichert (konsistent mit Sortier-/Filter-Prefs).
@@ -792,7 +807,7 @@ export default function GardenMap({
       {!disable3D && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-1001 bg-scholle-bg-container rounded-lg shadow-lg p-1 flex gap-1 border border-scholle-border">
           <button
-            onClick={() => setMapType("osm")}
+            onClick={() => selectMapType("osm")}
             className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
               mapType === "osm"
                 ? "bg-scholle-green text-white"
@@ -802,7 +817,7 @@ export default function GardenMap({
             Karte
           </button>
           <button
-            onClick={() => setMapType("3d")}
+            onClick={() => selectMapType("3d")}
             className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
               mapType === "3d"
                 ? "bg-scholle-green text-white"

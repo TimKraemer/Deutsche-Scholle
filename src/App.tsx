@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { CookieConsentRef } from "./components/CookieConsent";
 import CookieConsent from "./components/CookieConsent";
@@ -7,14 +7,9 @@ import GardenList from "./components/GardenList";
 import GardenSearch from "./components/GardenSearch";
 import { findGardenByNumber, mockGardens } from "./data/mockGardens";
 import { useCookiePreferences } from "./hooks/useCookiePreferences";
+import { useGardenData } from "./hooks/useGardenData";
 import type { Garden } from "./types/garden";
-import type { OSMWay } from "./utils/osm";
-import {
-  loadAllGardens,
-  loadAllGardensWithUpdate,
-  searchGardenByNumber,
-  searchGardenByNumberWithUpdate,
-} from "./utils/osm";
+import { findOsmGarden, getGardenData } from "./utils/osm";
 
 // Karte (Leaflet) lazy laden: schwerste Abhängigkeit, wird erst nach OSM-Zustimmung gerendert
 const GardenMap = lazy(() => import("./components/GardenMap"));
@@ -22,7 +17,7 @@ const GardenMap = lazy(() => import("./components/GardenMap"));
 function App() {
   const navigate = useNavigate();
   const { cookiePreferences, handleConsentChange } = useCookiePreferences();
-  const [allGardens, setAllGardens] = useState<OSMWay[]>([]);
+  const { allGardens } = useGardenData(cookiePreferences.openStreetMap);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [hoveredGardenNumber, setHoveredGardenNumber] = useState<string | null>(null);
   const [filteredGardens, setFilteredGardens] = useState<Garden[]>([]);
@@ -31,42 +26,6 @@ function App() {
   const handleFilteredGardensChange = useCallback((gardens: Garden[]) => {
     setFilteredGardens(gardens);
   }, []);
-
-  // Lade alle Gärten nur wenn OSM-Zustimmung gegeben wurde
-  // Warum Cookie-Check?
-  // - DSGVO-konform: Keine API-Calls ohne Zustimmung
-  // - Verhindert unnötige Requests wenn Benutzer OSM nicht aktiviert hat
-  useEffect(() => {
-    if (!cookiePreferences.openStreetMap) {
-      return;
-    }
-
-    // Hybrid-Ansatz: Zeige sofort gecachte Daten, aktualisiere im Hintergrund
-    // Warum?
-    // - Sofortige Anzeige für bessere UX (kein Warten auf großen API-Request)
-    // - Hintergrund-Update stellt sicher, dass neue Gärten gefunden werden
-    const cachedGardens = loadAllGardensWithUpdate((updatedGardens) => {
-      // Callback wird aufgerufen wenn neue Daten verfügbar sind
-      setAllGardens(updatedGardens);
-    });
-
-    // Setze sofort gecachte Daten (falls vorhanden)
-    if (cachedGardens.length > 0) {
-      setAllGardens(cachedGardens);
-    } else {
-      // Wenn kein Cache vorhanden, lade sofort (ohne Cache)
-      // Fallback für ersten Besuch oder nach Cache-Löschung
-      loadAllGardens(false)
-        .then((gardens: OSMWay[]) => {
-          if (gardens.length > 0) {
-            setAllGardens(gardens);
-          }
-        })
-        .catch((err: unknown) => {
-          console.error("Error loading all gardens:", err);
-        });
-    }
-  }, [cookiePreferences.openStreetMap]);
 
   const handleSearch = async (gardenNumber: string) => {
     setSearchError(null);
@@ -84,39 +43,16 @@ function App() {
     }
 
     // Wenn nicht in Datenbank, prüfe in OSM (nur wenn Zustimmung gegeben)
-    // Warum OSM-Check?
-    // - Einige Gärten existieren nur in OSM (noch nicht in Datenbank)
-    // - Ermöglicht Suche auch für nicht-verfügbare Gärten
+    // Einige Gärten existieren nur in OSM (noch nicht in Datenbank)
     if (cookiePreferences.openStreetMap) {
-      // Hybrid-Ansatz: Zeige sofort gecachte Daten, aktualisiere im Hintergrund
-      const cachedOsmWay = searchGardenByNumberWithUpdate(gardenNumber, (updatedWay) => {
-        // Callback wird aufgerufen wenn neue Daten verfügbar sind
-        // Navigiere nur wenn noch auf der Startseite (verhindert Navigation während User bereits navigiert)
-        if (updatedWay && window.location.pathname === "/") {
-          navigate(`/${gardenNumber}`);
-        }
-      });
-
-      if (cachedOsmWay) {
-        // Garten in OSM Cache gefunden, navigiere zur Detailseite
-        navigate(`/${gardenNumber}`);
-        return;
-      }
-
-      // Wenn kein Cache vorhanden, warte auf OSM-Request
       try {
-        // Versuche mit forceRefresh um sicherzustellen, dass wir die neuesten Daten bekommen
-        // Warum forceRefresh?
-        // - Bei Suche wollen wir aktuelle Daten (Garten könnte gerade hinzugefügt worden sein)
-        const osmWay = await searchGardenByNumber(gardenNumber, true);
-        if (osmWay) {
-          // Garten in OSM gefunden, navigiere zur Detailseite
+        const data = await getGardenData();
+        if (findOsmGarden(data, gardenNumber)) {
           navigate(`/${gardenNumber}`);
           return;
         }
       } catch (err) {
         console.error("Error searching in OSM:", err);
-        // Weiter mit Fehlerbehandlung (zeigt Fehlermeldung unten)
       }
     }
 

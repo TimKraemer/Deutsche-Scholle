@@ -80,7 +80,7 @@ export function setCache<T>(key: string, data: T, ttl: number = DEFAULT_TTL): vo
 /**
  * Entfernt abgelaufene Cache-Einträge
  */
-function clearExpiredCache(): void {
+export function clearExpiredCache(): void {
   try {
     const keys = Object.keys(localStorage);
     for (const key of keys) {
@@ -108,8 +108,6 @@ function clearExpiredCache(): void {
  * Cache-Keys
  */
 export const CacheKeys = {
-  ALL_GARDENS: "all_gardens",
-  GARDEN: (number: string) => `garden_${number}`,
-  PARCEL: (wayId: number) => `parcel_${wayId}`,
+  GARDEN_DATA: "garden_data",
   DEBUG_RESULTS: "debug_results",
 } as const;
