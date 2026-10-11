@@ -17,8 +17,9 @@ Run these from the project root:
 # 1. Build the production bundle
 bun run build
 
-# 2. Sync dist/ to the server web root (mirrors, deletes removed files)
-rsync -az --delete -e ssh dist/ scortex-vm:/var/www/www-scholle/
+# 2. Sync dist/ to the server web root (mirrors, deletes removed files).
+#    freie-gaerten.json is excluded: the server cron job owns it (see below).
+rsync -az --delete --exclude=/freie-gaerten.json -e ssh dist/ scortex-vm:/var/www/www-scholle/
 
 # 3. Verify (expect HTTP 200; the SPA route must also return 200)
 curl -sS -o /dev/null -w "root: HTTP %{http_code}\n" https://scholle.tim-kraemer.de/
@@ -35,6 +36,9 @@ the new files are live immediately after rsync.
 - [ ] The build first runs `bun run osm:update`, which refreshes `public/osm-gardens.json` from
       Overpass. If it prints "OSM-Snapshot nicht aktualisiert", the old snapshot ships; rerun
       `bun run osm:update` later if fresh OSM edits should go live. Commit the updated snapshot.
+- [ ] The build also runs `bun run gardens:update` (list of free gardens from the club website,
+      `public/freie-gaerten.json`). This copy is only for local dev; on the server the cron job
+      below keeps its own, so rsync excludes it.
 - [ ] Then run the rsync + verify steps above.
 
 ## Infrastructure (reference — one-time setup, already done)
@@ -127,6 +131,22 @@ a minute). Check with:
 
 ```bash
 ssh scortex-vm 'docker logs --tail 60 nginx-proxy-acme 2>&1 | grep -i scholle'
+```
+
+### Free gardens cron job
+
+`~/scholle/update-free-gardens.py` (copy of `scripts/update-free-gardens.py`, Python 3 only, the
+server has no Bun/Node) runs from the `scortex` crontab every three hours and writes
+`/var/www/www-scholle/freie-gaerten.json`. Output goes to `~/scholle/update-free-gardens.log`.
+
+```cron
+17 */3 * * * /usr/bin/python3 $HOME/scholle/update-free-gardens.py /var/www/www-scholle/freie-gaerten.json >> $HOME/scholle/update-free-gardens.log 2>&1
+```
+
+After changing the script, copy it again:
+
+```bash
+scp scripts/update-free-gardens.py scortex-vm:scholle/update-free-gardens.py
 ```
 
 ## Notes

@@ -140,6 +140,19 @@ warten (die regelmäßig 500/504 liefern oder hängen). Ist Overpass beim Build 
 bleibt der vorhandene Snapshot erhalten. Ist der Stand älter als 12 Stunden, aktualisiert der
 Browser ihn einmal im Hintergrund und merkt sich das Ergebnis im localStorage.
 
+### Liste der freien Gärten
+
+Die freien Gärten stammen von der Vereinsseite
+https://www.deutsche-scholle-os.de/freie-gaerten/index.php. Die Seite baut ihre Tabelle per
+JavaScript aus einem Array im HTML, `scripts/update-free-gardens.py` liest dieses Array aus und
+schreibt `public/freie-gaerten.json`. Leere Felder bei Wertermittlung oder Wertminderung
+erscheinen in der App als „n.V.“. Weil die Vereinsseite kein Stand-Datum nennt, setzt das Skript
+`changedAt` auf den Tag, an dem sich die Liste zuletzt geändert hat.
+
+Das Skript läuft beim Build (`bun run gardens:update`) und auf dem Server per Cron alle drei
+Stunden (Python 3, ohne Abhängigkeiten). Dort schreibt es direkt in den Web-Root, neue Gärten
+erscheinen also ohne Deploy. Schlägt der Abruf fehl, bleibt die vorhandene Datei bestehen.
+
 ## 📁 Projektstruktur
 
 ```
@@ -157,13 +170,12 @@ src/
 ├── pages/              # Seiten-Komponenten
 │   ├── GardenPage.tsx
 │   └── DebugPage.tsx   # Debug-Route für Größenvergleich
-├── data/               # Mock-Daten
-│   └── mockGardens.ts
 ├── types/              # TypeScript Typen
 │   ├── garden.ts
 │   └── cookies.ts
 ├── utils/              # Utility-Funktionen
 │   ├── osm.ts          # OSM-Daten (Snapshot, Overpass, Parzellenerkennung)
+│   ├── freeGardens.ts  # Liste der freien Gärten (/freie-gaerten.json)
 │   ├── cache.ts        # Caching-Logik
 │   ├── cookies.ts      # Cookie-Verwaltung
 │   ├── formatting.ts   # Formatierungsfunktionen

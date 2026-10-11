@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LAST_DB_UPDATE } from "../data/mockGardens";
 import type { Garden } from "../types/garden";
 import { ON_REQUEST } from "../types/garden";
 import {
@@ -19,6 +18,9 @@ import GardenFilters from "./GardenFilters";
 
 interface GardenListProps {
   gardens: Garden[];
+  changedAt?: string | null; // Datum der letzten Änderung der Vereinsliste
+  isLoading?: boolean;
+  hasError?: boolean;
   onGardenClick: (gardenNumber: string) => void;
   hoveredGardenNumber?: string | null;
   onGardenHover?: (gardenNumber: string | null) => void;
@@ -27,6 +29,9 @@ interface GardenListProps {
 
 export default function GardenList({
   gardens,
+  changedAt,
+  isLoading = false,
+  hasError = false,
   onGardenClick,
   hoveredGardenNumber,
   onGardenHover,
@@ -106,9 +111,9 @@ export default function GardenList({
               {sortedGardens.length}{" "}
               {sortedGardens.length === 1 ? "Garten verfügbar" : "Gärten verfügbar"}
             </p>
-            <p className="text-xs text-white/70 mt-0.5">
-              Stand: {formatLastUpdate(LAST_DB_UPDATE)}
-            </p>
+            {changedAt && (
+              <p className="text-xs text-white/70 mt-0.5">Stand: {formatLastUpdate(changedAt)}</p>
+            )}
           </div>
           <div className="flex gap-2 flex-wrap">
             <button
@@ -235,16 +240,24 @@ export default function GardenList({
         </div>
       </div>
 
-      {/* Filter */}
-      <GardenFilters
-        gardens={availableGardens}
-        onFilterChange={handleFilterChange}
-        onFilterActiveChange={handleFilterActiveChange}
-      />
+      {/* Filter erst nach dem Laden, sonst berechnet er seine Grenzen aus der leeren Liste */}
+      {!isLoading && (
+        <GardenFilters
+          gardens={availableGardens}
+          onFilterChange={handleFilterChange}
+          onFilterActiveChange={handleFilterActiveChange}
+        />
+      )}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {hasNoResults ? (
           <div className="p-6 text-center">
-            {isFiltered ? (
+            {isLoading ? (
+              <p className="text-scholle-text-light">Freie Gärten werden geladen…</p>
+            ) : hasError ? (
+              <p className="text-scholle-text-light">
+                Die Liste der freien Gärten konnte gerade nicht geladen werden.
+              </p>
+            ) : isFiltered ? (
               <div className="space-y-2">
                 <p className="text-scholle-text-light font-medium">
                   Unter den aktuellen Filtereinstellungen wurden keine Gärten gefunden.

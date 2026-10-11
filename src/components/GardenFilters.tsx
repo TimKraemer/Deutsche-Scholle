@@ -109,8 +109,13 @@ export default function GardenFilters({
 
   // Speichere Filter-Werte in localStorage wenn sie sich ändern
   useEffect(() => {
-    saveFiltersToStorage(filters);
-  }, [filters]);
+    saveFiltersToStorage(filters, {
+      minPrice: ranges.defaultMinPrice,
+      maxPrice: ranges.defaultMaxPrice,
+      minSize: ranges.defaultMinSize,
+      maxSize: ranges.defaultMaxSize,
+    });
+  }, [filters, ranges]);
 
   const [isExpanded, setIsExpanded] = useState(false);
 

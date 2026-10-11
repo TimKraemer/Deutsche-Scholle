@@ -5,6 +5,15 @@
 import type { Garden } from "../types/garden";
 import { gardenValueToNumber } from "./formatting";
 
+export interface FilterRanges {
+  minPrice: number;
+  maxPrice: number;
+  minSize: number;
+  maxSize: number;
+}
+
+const RANGE_KEYS = ["minPrice", "maxPrice", "minSize", "maxSize"] as const;
+
 export interface FilterValues {
   minPrice: number;
   maxPrice: number;
@@ -45,31 +54,24 @@ export function applyGardenFilters(gardens: Garden[], filters: FilterValues): Ga
 
 /**
  * Lädt Filter-Werte aus localStorage
- * Gibt Standard-Werte zurück wenn keine gespeichert sind
+ * Gibt Standard-Werte zurück wenn keine gespeichert sind. Eine als null gespeicherte Grenze
+ * hat der Nutzer nicht verändert, sie folgt der aktuellen Liste.
  */
-export function loadFiltersFromStorage(defaultRanges: {
-  minPrice: number;
-  maxPrice: number;
-  minSize: number;
-  maxSize: number;
-}): FilterValues {
+export function loadFiltersFromStorage(defaultRanges: FilterRanges): FilterValues {
   try {
     const saved = localStorage.getItem("gardenFilters");
     if (saved) {
       const parsed = JSON.parse(saved);
       // Validiere gespeicherte Werte
       if (
-        typeof parsed.minPrice === "number" &&
-        typeof parsed.maxPrice === "number" &&
-        typeof parsed.minSize === "number" &&
-        typeof parsed.maxSize === "number" &&
+        RANGE_KEYS.every((key) => parsed[key] === null || typeof parsed[key] === "number") &&
         typeof parsed.onlyAvailableNow === "boolean"
       ) {
         return {
-          minPrice: parsed.minPrice,
-          maxPrice: parsed.maxPrice,
-          minSize: parsed.minSize,
-          maxSize: parsed.maxSize,
+          minPrice: parsed.minPrice ?? defaultRanges.minPrice,
+          maxPrice: parsed.maxPrice ?? defaultRanges.maxPrice,
+          minSize: parsed.minSize ?? defaultRanges.minSize,
+          maxSize: parsed.maxSize ?? defaultRanges.maxSize,
           onlyAvailableNow: parsed.onlyAvailableNow,
         };
       }
@@ -90,10 +92,18 @@ export function loadFiltersFromStorage(defaultRanges: {
 
 /**
  * Speichert Filter-Werte in localStorage
+ * Grenzen auf dem Standardwert werden als null gespeichert. Sonst würde ein später
+ * hinzugekommener größerer oder teurerer Garten beim nächsten Besuch ausgefiltert.
  */
-export function saveFiltersToStorage(filters: FilterValues): void {
+export function saveFiltersToStorage(filters: FilterValues, defaultRanges: FilterRanges): void {
+  const stored: Record<string, number | boolean | null> = {
+    onlyAvailableNow: filters.onlyAvailableNow,
+  };
+  for (const key of RANGE_KEYS) {
+    stored[key] = filters[key] === defaultRanges[key] ? null : filters[key];
+  }
   try {
-    localStorage.setItem("gardenFilters", JSON.stringify(filters));
+    localStorage.setItem("gardenFilters", JSON.stringify(stored));
   } catch (error) {
     console.error("Error saving filters to storage:", error);
   }
@@ -105,15 +115,7 @@ export function saveFiltersToStorage(filters: FilterValues): void {
  * @param filters Aktuelle Filter-Werte
  * @param defaultRanges Gerundete Standard-Werte (für Vergleich)
  */
-export function hasActiveFilters(
-  filters: FilterValues,
-  defaultRanges: {
-    minPrice: number;
-    maxPrice: number;
-    minSize: number;
-    maxSize: number;
-  }
-): boolean {
+export function hasActiveFilters(filters: FilterValues, defaultRanges: FilterRanges): boolean {
   return (
     filters.minPrice !== defaultRanges.minPrice ||
     filters.maxPrice !== defaultRanges.maxPrice ||

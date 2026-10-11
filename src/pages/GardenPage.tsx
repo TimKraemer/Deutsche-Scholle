@@ -3,11 +3,12 @@ import { useNavigate, useParams } from "react-router-dom";
 import type { CookieConsentRef } from "../components/CookieConsent";
 import CookieConsent from "../components/CookieConsent";
 import GardenDetails from "../components/GardenDetails";
-import { findGardenByNumber, mockGardens } from "../data/mockGardens";
 import { useCookiePreferences } from "../hooks/useCookiePreferences";
+import { useFreeGardens } from "../hooks/useFreeGardens";
 import { useGardenData } from "../hooks/useGardenData";
 import type { Garden } from "../types/garden";
 import { gardenValueToNumber } from "../utils/formatting";
+import { findGardenByNumber } from "../utils/freeGardens";
 import {
   applyGardenFilters,
   hasActiveFilters,
@@ -34,12 +35,13 @@ export default function GardenPage() {
     isLoading: osmLoading,
     hasError: osmError,
   } = useGardenData(cookiePreferences.openStreetMap);
+  const { gardens: freeGardens, isLoading: freeGardensLoading } = useFreeGardens();
 
-  // Datenbank-Daten stehen sofort bereit, OSM-Daten (Umriss, Parzelle) kommen aus dem
-  // Snapshot dazu. Alles wird synchron abgeleitet, es gibt keine eigene Abfrage pro Garten.
-  const mockGarden = useMemo(
-    () => (gardenNumber ? (findGardenByNumber(gardenNumber) ?? null) : null),
-    [gardenNumber]
+  // Daten aus der Vereinsliste (/freie-gaerten.json), OSM-Daten (Umriss, Parzelle) kommen aus
+  // dem Snapshot dazu. Alles wird synchron abgeleitet, es gibt keine eigene Abfrage pro Garten.
+  const listGarden = useMemo(
+    () => (gardenNumber ? (findGardenByNumber(freeGardens, gardenNumber) ?? null) : null),
+    [freeGardens, gardenNumber]
   );
   const osmWay = useMemo(
     () => (gardenData && gardenNumber ? findOsmGarden(gardenData, gardenNumber) : null),
@@ -47,19 +49,19 @@ export default function GardenPage() {
   );
   const osmParcel = (osmWay && gardenData?.parcels[osmWay.id]) || null;
   const osmGarden = useMemo(
-    () => (osmWay ? osmWayToGarden(osmWay, mockGarden ?? undefined, osmParcel) : null),
-    [osmWay, mockGarden, osmParcel]
+    () => (osmWay ? osmWayToGarden(osmWay, listGarden ?? undefined, osmParcel) : null),
+    [osmWay, listGarden, osmParcel]
   );
-  const selectedGarden: Garden | null = osmGarden ?? mockGarden;
+  const selectedGarden: Garden | null = osmGarden ?? listGarden;
   const hasOsmData = osmGarden !== null;
   const osmGeometry = hasOsmData ? osmWay?.geometry : undefined;
   const osmSize = osmGarden?.osmSize;
 
-  // Vollbild-Spinner nur, wenn wir keine Datenbank-Daten haben und auf OSM warten müssen
-  const isLoading = !mockGarden && osmLoading;
+  // Vollbild-Spinner, solange die Vereinsliste lädt oder der Garten nicht darin steht und wir auf OSM warten
+  const isLoading = freeGardensLoading || (!listGarden && osmLoading);
 
   let error: string | null = null;
-  if (!mockGarden) {
+  if (!listGarden) {
     if (!cookiePreferences.openStreetMap) {
       error = `Garten mit Nummer "${gardenNumber}" nicht gefunden. Bitte aktivieren Sie OpenStreetMap in den Cookie-Einstellungen, um auch Gärten zu finden, die nur in OSM vorhanden sind.`;
     } else if (osmError) {
@@ -88,7 +90,7 @@ export default function GardenPage() {
   // WICHTIG: Filter werden berücksichtigt - beim Durchblättern werden nur gefilterte Gärten angezeigt
   const { availableGardens, ranges, activeFilters } = useMemo(() => {
     // Schritt 1: Filtere verfügbare Gärten (availableFrom gesetzt)
-    const available = filterAvailableGardens(mockGardens);
+    const available = filterAvailableGardens(freeGardens);
 
     if (available.length === 0) {
       // Fallback wenn keine verfügbaren Gärten
@@ -164,7 +166,7 @@ export default function GardenPage() {
       ranges: calculatedRanges,
       activeFilters: filters,
     };
-  }, [sortBy, sortDirection]);
+  }, [freeGardens, sortBy, sortDirection]);
 
   // Prüfe ob Filter aktiv sind (vergleiche mit gerundeten Standard-Werten)
   const filtersActive = useMemo(

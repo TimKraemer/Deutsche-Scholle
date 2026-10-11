@@ -5,10 +5,11 @@ import CookieConsent from "./components/CookieConsent";
 import CookieConsentContent from "./components/CookieConsentContent";
 import GardenList from "./components/GardenList";
 import GardenSearch from "./components/GardenSearch";
-import { findGardenByNumber, mockGardens } from "./data/mockGardens";
 import { useCookiePreferences } from "./hooks/useCookiePreferences";
+import { useFreeGardens } from "./hooks/useFreeGardens";
 import { useGardenData } from "./hooks/useGardenData";
 import type { Garden } from "./types/garden";
+import { findGardenByNumber } from "./utils/freeGardens";
 import { findOsmGarden, getGardenData } from "./utils/osm";
 
 // Karte (Leaflet) lazy laden: schwerste Abhängigkeit, wird erst nach OSM-Zustimmung gerendert
@@ -18,6 +19,7 @@ function App() {
   const navigate = useNavigate();
   const { cookiePreferences, handleConsentChange } = useCookiePreferences();
   const { allGardens } = useGardenData(cookiePreferences.openStreetMap);
+  const freeGardens = useFreeGardens();
   const [searchError, setSearchError] = useState<string | null>(null);
   const [hoveredGardenNumber, setHoveredGardenNumber] = useState<string | null>(null);
   const [filteredGardens, setFilteredGardens] = useState<Garden[]>([]);
@@ -30,11 +32,10 @@ function App() {
   const handleSearch = async (gardenNumber: string) => {
     setSearchError(null);
 
-    // Prüfe zuerst ob der Garten in den Mock-Daten existiert
-    // Warum zuerst Mock-Daten?
-    // - Lokale Datenbank ist schneller als API-Request
+    // Prüfe zuerst ob der Garten in der Liste der freien Gärten steht
+    // - Liste ist bereits geladen, schneller als die OSM-Daten
     // - Enthält zusätzliche Informationen (Preis, Verfügbarkeit, etc.)
-    const garden = findGardenByNumber(gardenNumber);
+    const garden = findGardenByNumber(freeGardens.gardens, gardenNumber);
 
     if (garden) {
       // Garten in Datenbank gefunden, navigiere direkt
@@ -96,7 +97,10 @@ function App() {
             {/* Liste der freien Gärten */}
             <div className="lg:col-span-1 flex flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
               <GardenList
-                gardens={mockGardens}
+                gardens={freeGardens.gardens}
+                changedAt={freeGardens.changedAt}
+                isLoading={freeGardens.isLoading}
+                hasError={freeGardens.hasError}
                 onGardenClick={handleGardenClick}
                 hoveredGardenNumber={hoveredGardenNumber}
                 onGardenHover={setHoveredGardenNumber}

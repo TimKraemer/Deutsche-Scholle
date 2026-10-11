@@ -505,12 +505,12 @@ function calculatePolygonArea(geometry: Array<{ lat: number; lon: number }>): nu
 /**
  * Konvertiert OSM Way zu Garden-Format
  * @param osmWay Der OSM Way für den Garten
- * @param mockData Optionale Mock-Daten aus der Datenbank
+ * @param listData Optionale Daten aus der Vereinsliste der freien Gärten
  * @param enclosingParcel Die umschließende Parzelle aus OSM (optional)
  */
 export function osmWayToGarden(
   osmWay: OSMWay,
-  mockData?: Partial<Garden>,
+  listData?: Partial<Garden>,
   enclosingParcel?: string | null
 ): Garden | null {
   if (!osmWay.geometry || osmWay.geometry.length === 0) {
@@ -535,19 +535,19 @@ export function osmWayToGarden(
   const calculatedSize = calculatePolygonArea(osmWay.geometry);
 
   // Verwende umschließende Parzelle aus OSM, falls vorhanden, sonst Mock-Daten
-  const parcel = enclosingParcel || mockData?.parcel || "";
+  const parcel = enclosingParcel || listData?.parcel || "";
 
   return {
     id: `garden-${osmWay.id}`,
     number: osmWay.tags.ref || "", // ref ist das Standard-Tag für Gartennummern
     parcel: parcel,
-    size: mockData?.size || 0, // Datenbank-Größe
+    size: listData?.size || 0, // Datenbank-Größe
     osmSize: calculatedSize, // OSM-Größe (immer setzen, auch wenn 0)
-    availableFrom: mockData?.availableFrom || "",
-    valuation: mockData?.valuation || 0,
-    valueReduction: mockData?.valueReduction || 0,
-    hasElectricity: mockData?.hasElectricity, // Optional: nur wenn bekannt
-    waterConnection: mockData?.waterConnection, // Optional: nur wenn bekannt
+    availableFrom: listData?.availableFrom || "",
+    valuation: listData?.valuation || 0,
+    valueReduction: listData?.valueReduction || 0,
+    hasElectricity: listData?.hasElectricity, // Optional: nur wenn bekannt
+    waterConnection: listData?.waterConnection, // Optional: nur wenn bekannt
     coordinates: [centerLat, centerLon] as [number, number],
     bounds: [
       [minLat, minLon],

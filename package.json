@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "bun run vite",
-    "build": "bun run osm:update && bun run tsc -b && bun run vite build",
+    "build": "bun run osm:update && bun run gardens:update && bun run tsc -b && bun run vite build",
     "osm:update": "bun scripts/update-osm-snapshot.ts",
+    "gardens:update": "python3 scripts/update-free-gardens.py",
     "lint": "bunx @biomejs/biome check .",
     "lint:fix": "bunx @biomejs/biome check --write --unsafe --max-diagnostics=200 .",
     "format": "bunx @biomejs/biome format --write .",

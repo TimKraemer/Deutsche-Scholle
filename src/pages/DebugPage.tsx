@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { mockGardens } from "../data/mockGardens";
 import type { CookiePreferences } from "../types/cookies";
 import { CacheKeys, getFromCache, setCache } from "../utils/cache";
 import { loadCookiePreferences } from "../utils/cookies";
+import { getFreeGardens } from "../utils/freeGardens";
 import { getGardenData, osmWayToGarden, refreshGardenData } from "../utils/osm";
 
 interface GardenSizeComparison {
@@ -87,6 +87,10 @@ export default function DebugPage() {
   // forceRefresh=true holt frische Daten direkt von Overpass statt aus dem Snapshot.
   const computeResults = useCallback(async (forceRefresh: boolean): Promise<DebugResults> => {
     const results: GardenSizeComparison[] = [];
+    const { gardens: freeGardens } = await getFreeGardens().catch((error) => {
+      console.error("Error loading free gardens:", error);
+      return { gardens: [] };
+    });
 
     let allOsmGardens: any[] = [];
     try {
@@ -130,11 +134,11 @@ export default function DebugPage() {
         osmRefs.add(osm.tags.ref);
       }
     }
-    // Parzelle aus den Mock-Daten ergänzen, falls vorhanden (rein informativ).
+    // Parzelle aus der Vereinsliste ergänzen, falls vorhanden (rein informativ).
     const numberToParcel = new Map<string, string>();
-    for (const mockGarden of mockGardens) {
-      if (mockGarden.parcel) {
-        numberToParcel.set(mockGarden.number, mockGarden.parcel);
+    for (const listGarden of freeGardens) {
+      if (listGarden.parcel) {
+        numberToParcel.set(listGarden.number, listGarden.parcel);
       }
     }
     const missingGardens: MissingOsmGarden[] = [];
@@ -149,15 +153,15 @@ export default function DebugPage() {
     }
 
     // Verarbeite jeden Garten aus der Datenbank
-    for (const mockGarden of mockGardens) {
-      const dbSize = mockGarden.size || 0;
+    for (const listGarden of freeGardens) {
+      const dbSize = listGarden.size || 0;
 
       // Suche nach OSM-Daten für diesen Garten
-      const osmWay = allOsmGardens.find((osm) => osm.tags?.ref === mockGarden.number) || null;
+      const osmWay = allOsmGardens.find((osm) => osm.tags?.ref === listGarden.number) || null;
 
       if (osmWay) {
-        // Kombiniere OSM-Daten mit Mock-Daten
-        const garden = osmWayToGarden(osmWay, mockGarden);
+        // Kombiniere OSM-Daten mit der Vereinsliste
+        const garden = osmWayToGarden(osmWay, listGarden);
 
         if (garden && garden.osmSize !== undefined && garden.osmSize !== null) {
           const osmSize = garden.osmSize;
@@ -165,34 +169,34 @@ export default function DebugPage() {
           const percentageDiff = dbSize > 0 ? (difference / dbSize) * 100 : null;
 
           results.push({
-            number: mockGarden.number,
+            number: listGarden.number,
             dbSize,
             osmSize,
             difference,
             percentageDiff,
             hasOsmData: true,
-            parcel: mockGarden.parcel || "-",
+            parcel: listGarden.parcel || "-",
           });
         } else {
           results.push({
-            number: mockGarden.number,
+            number: listGarden.number,
             dbSize,
             osmSize: null,
             difference: null,
             percentageDiff: null,
             hasOsmData: false,
-            parcel: mockGarden.parcel || "-",
+            parcel: listGarden.parcel || "-",
           });
         }
       } else {
         results.push({
-          number: mockGarden.number,
+          number: listGarden.number,
           dbSize,
           osmSize: null,
           difference: null,
           percentageDiff: null,
           hasOsmData: false,
-          parcel: mockGarden.parcel || "-",
+          parcel: listGarden.parcel || "-",
         });
       }
     }
