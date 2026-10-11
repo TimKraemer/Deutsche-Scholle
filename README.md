@@ -51,7 +51,7 @@ Die Anwendung nutzt einen ausgeklügelten Algorithmus, um automatisch die richti
 - **Build Tool**: Vite 7
 - **Styling**: Tailwind CSS mit Custom Color Palette
 - **Karten**: Leaflet & React-Leaflet für OSM-Karten
-- **3D-Visualisierung**: Google Maps API für Satellitenansicht
+- **3D-Visualisierung**: Google Maps Map3DElement (fotorealistisches 3D-Modell) und flaches Satellitenbild
 - **Routing**: React Router DOM
 - **Datenquelle**: OpenStreetMap (Snapshot aus der Overpass API, beim Build erzeugt)
 - **Code Quality**: Biome (Linter & Formatter), TypeScript strict mode

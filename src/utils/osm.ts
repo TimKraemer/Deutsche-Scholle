@@ -30,6 +30,8 @@ export interface OSMWay {
   tags: {
     [key: string]: string;
   };
+  // Geländehöhe des Gartenmittelpunkts in m über NN (vom Build-Skript ergänzt, für die 3D-Kamera)
+  elevation?: number;
 }
 
 interface OSMResponse {
@@ -334,6 +336,8 @@ export async function fetchGardenDataFromOverpass(
 }
 
 let dataPromise: Promise<GardenData> | null = null;
+// Zuletzt geladener Stand, um Geländehöhen bei einer Aktualisierung zu übernehmen
+let currentData: GardenData | null = null;
 let refreshPromise: Promise<GardenData> | null = null;
 const listeners = new Set<(data: GardenData) => void>();
 
@@ -378,6 +382,7 @@ export function getGardenData(): Promise<GardenData> {
     dataPromise = promise;
     promise
       .then((data) => {
+        currentData = data;
         if (Date.now() - data.generatedAt > REFRESH_AFTER_MS) {
           refreshGardenData().catch((error) => {
             console.warn("Hintergrund-Aktualisierung der OSM-Daten fehlgeschlagen:", error);
@@ -401,6 +406,14 @@ export function refreshGardenData(): Promise<GardenData> {
   if (!refreshPromise) {
     refreshPromise = fetchGardenDataFromOverpass()
       .then((data) => {
+        // Overpass liefert keine Höhen, die aus dem Snapshot übernehmen
+        const previousElevations = new Map(
+          (currentData?.gardens ?? []).map((g) => [g.id, g.elevation])
+        );
+        for (const garden of data.gardens) {
+          garden.elevation = previousElevations.get(garden.id);
+        }
+        currentData = data;
         setCache(CacheKeys.GARDEN_DATA, data, CACHE_TTL_MS);
         dataPromise = Promise.resolve(data);
         for (const listener of listeners) {

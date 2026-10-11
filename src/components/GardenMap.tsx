@@ -21,6 +21,7 @@ import {
   MIN_ZOOM_FOR_LABELS,
   OSNABRUECK_BOUNDS,
 } from "../utils/constants";
+import { GOOGLE_MAPS_API_KEY, loadGoogleMaps } from "../utils/googleMaps";
 import {
   applyBoundsPadding,
   calculateGardensBounds,
@@ -30,9 +31,7 @@ import {
 import type { OSMWay } from "../utils/osm";
 import { osmGeometryToLeafletCoords } from "../utils/osm";
 import CookieConsentHint from "./CookieConsentHint";
-
-// Google Maps API Key aus Umgebungsvariable
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
+import Garden3DView from "./Garden3DView";
 
 const DefaultIcon = L.icon({
   iconUrl: icon,
@@ -375,15 +374,11 @@ export default function GardenMap({
     setMapType(type);
   };
 
-  // Steuert, ob das Luftbild mit 3D-Neigung (Tilt 45°) oder flach (Tilt 0°, Top-Down)
-  // angezeigt wird. Wahl wird in localStorage gespeichert (konsistent mit Sortier-/Filter-Prefs).
+  // Steuert, ob das Luftbild als fotorealistisches 3D-Modell oder flach von oben angezeigt
+  // wird. Wahl wird in localStorage gespeichert (konsistent mit Sortier-/Filter-Prefs).
   const [is3DEnabled, setIs3DEnabled] = useState<boolean>(() => {
     return localStorage.getItem("gardenMap3DEnabled") !== "false";
   });
-  // Ref hält den aktuellen Wert, damit die Google-Maps-Init-Effekt-Closure nicht veraltet
-  // und der teure Karten-Aufbau nicht bei jedem Umschalten neu ausgeführt werden muss.
-  const is3DEnabledRef = useRef(is3DEnabled);
-  is3DEnabledRef.current = is3DEnabled;
 
   // Zeige Labels in OSM-Ansicht wenn Zoom hoch genug ist (auch auf Detailseite)
   const showLabels = currentZoom >= MIN_ZOOM_FOR_LABELS && mapType === "osm";
@@ -500,19 +495,11 @@ export default function GardenMap({
   const googleMap3DRef = useRef<HTMLDivElement | null>(null);
   const googleMapInstanceRef = useRef<any>(null);
   const googleMapPolygonRef = useRef<any>(null);
-  const googleMapsScriptLoadedRef = useRef<boolean>(false);
   const mapWrapperRef = useRef<HTMLDivElement>(null);
 
-  // Aktualisiere die Neigung der bereits erstellten Google-Maps-Instanz, wenn der Nutzer
-  // zwischen 3D (Tilt 45°) und flachem Luftbild (Tilt 0°) umschaltet, und persistiere die Wahl.
   useEffect(() => {
     localStorage.setItem("gardenMap3DEnabled", String(is3DEnabled));
-    const map = googleMapInstanceRef.current;
-    if (mapType === "3d" && map) {
-      map.setTilt(is3DEnabled ? GOOGLE_MAPS_CONFIG.TILT : 0);
-      map.setHeading(0);
-    }
-  }, [is3DEnabled, mapType]);
+  }, [is3DEnabled]);
 
   // Stelle sicher, dass die Karte die volle Höhe des Parents nutzt
   useEffect(() => {
@@ -530,10 +517,10 @@ export default function GardenMap({
     return () => window.removeEventListener("resize", updateHeight);
   }, []);
 
-  // Google Maps 3D Integration
+  // Flaches Google-Luftbild (Luftbild mit ausgeschaltetem 3D). Die 3D-Ansicht rendert Garden3DView.
   useEffect(() => {
-    if (mapType !== "3d" || !googleMap3DRef.current) {
-      // Cleanup wenn nicht mehr im 3D-Modus
+    if (mapType !== "3d" || is3DEnabled || !googleMap3DRef.current) {
+      // Cleanup wenn nicht mehr im flachen Luftbild
       if (googleMapPolygonRef.current) {
         googleMapPolygonRef.current.setMap(null);
         googleMapPolygonRef.current = null;
@@ -570,7 +557,7 @@ export default function GardenMap({
       return;
     }
 
-    const initGoogleMaps3D = () => {
+    const initFlatSatelliteMap = () => {
       if (!googleMap3DRef.current || !(window as any).google) {
         return;
       }
@@ -608,14 +595,14 @@ export default function GardenMap({
         bounds.extend(new google.maps.LatLng(INITIAL_MAP_CENTER[0], INITIAL_MAP_CENTER[1]));
       }
 
-      // Erstelle Google Maps mit 3D-Features
+      // Erstelle flache Google-Satellitenkarte
       const map = new google.maps.Map(googleMap3DRef.current, {
         center: bounds.isEmpty()
           ? { lat: INITIAL_MAP_CENTER[0], lng: INITIAL_MAP_CENTER[1] }
           : bounds.getCenter(),
         zoom: selectedGarden ? GOOGLE_MAPS_CONFIG.GARDEN_ZOOM : GOOGLE_MAPS_CONFIG.DEFAULT_ZOOM,
         mapTypeId: google.maps.MapTypeId.SATELLITE,
-        tilt: is3DEnabledRef.current ? GOOGLE_MAPS_CONFIG.TILT : 0,
+        tilt: 0,
         heading: 0,
         mapTypeControl: false,
         streetViewControl: false,
@@ -724,66 +711,20 @@ export default function GardenMap({
           }
         }, 100);
       }
+    };
 
-      // Stelle sicher, dass 3D aktiviert ist
-      // Warum tilesloaded Event?
-      // - Tilt muss nach vollständigem Laden der Karte gesetzt werden
-      // - Sonst wird 3D-Ansicht nicht korrekt aktiviert
-      google.maps.event.addListenerOnce(map, "tilesloaded", () => {
-        map.setTilt(is3DEnabledRef.current ? GOOGLE_MAPS_CONFIG.TILT : 0);
-        map.setHeading(0);
+    let cancelled = false;
+    loadGoogleMaps()
+      .then(() => {
+        if (!cancelled) initFlatSatelliteMap();
+      })
+      .catch((error) => {
+        console.error(error);
       });
-    };
-
-    // Lade Google Maps API Script falls noch nicht geladen
-    // Prüfe ob Script bereits im DOM existiert
-    const existingScript = document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]');
-
-    // Callback-Funktion für Google Maps API
-    const callbackName = "initGoogleMapsCallback";
-    (window as any)[callbackName] = () => {
-      googleMapsScriptLoadedRef.current = true;
-      initGoogleMaps3D();
-    };
-
-    // Prüfe ob API bereits vollständig geladen ist (LatLngBounds existiert)
-    const isGoogleMapsReady = () => {
-      return (window as any).google?.maps?.LatLngBounds;
-    };
-
-    if (!googleMapsScriptLoadedRef.current && !isGoogleMapsReady() && !existingScript) {
-      const script = document.createElement("script");
-      // v=quarterly: stabiler Release-Kanal. Der Standard-Kanal "weekly" verursacht
-      // gelegentlich transiente Loader-Fehler ("Could not load \"controls\"").
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&v=quarterly&libraries=geometry&loading=async&callback=${callbackName}`;
-      script.async = true;
-      script.defer = true;
-      script.onerror = () => {
-        console.error("Failed to load Google Maps API");
-      };
-      document.head.appendChild(script);
-    } else if (isGoogleMapsReady()) {
-      // Google Maps bereits vollständig geladen, initialisiere direkt
-      googleMapsScriptLoadedRef.current = true;
-      initGoogleMaps3D();
-    } else if (existingScript) {
-      // Script existiert bereits, warte auf vollständiges Laden
-      const checkGoogle = setInterval(() => {
-        if (isGoogleMapsReady()) {
-          googleMapsScriptLoadedRef.current = true;
-          clearInterval(checkGoogle);
-          initGoogleMaps3D();
-        }
-      }, 100);
-
-      // Timeout nach 5 Sekunden
-      setTimeout(() => {
-        clearInterval(checkGoogle);
-      }, 5000);
-    }
 
     // Cleanup
     return () => {
+      cancelled = true;
       if (googleMapPolygonRef.current) {
         googleMapPolygonRef.current.setMap(null);
         googleMapPolygonRef.current = null;
@@ -791,6 +732,7 @@ export default function GardenMap({
     };
   }, [
     mapType,
+    is3DEnabled,
     selectedGarden,
     osmGeometry,
     allGardens,
@@ -836,8 +778,8 @@ export default function GardenMap({
               }`}
               title={
                 is3DEnabled
-                  ? "3D-Neigung deaktivieren (flaches Luftbild von oben)"
-                  : "3D-Neigung aktivieren (Schrägansicht)"
+                  ? "3D-Ansicht ausschalten (flaches Luftbild von oben)"
+                  : "3D-Ansicht einschalten (fotorealistisches 3D-Modell)"
               }
               aria-pressed={is3DEnabled}
             >
@@ -847,10 +789,18 @@ export default function GardenMap({
         </div>
       )}
 
-      {/* Google Maps 3D Ansicht */}
+      {/* Google Luftbild: fotorealistisch in 3D oder flach von oben */}
       {mapType === "3d" ? (
         cookiePreferences.googleMaps && cookiePreferences.openStreetMap ? (
-          <div ref={googleMap3DRef} className="w-full h-full" />
+          is3DEnabled ? (
+            <Garden3DView
+              allGardens={allGardens}
+              selectedNumber={selectedGarden?.number ?? null}
+              selectedGeometry={selectedGarden ? osmGeometry : undefined}
+            />
+          ) : (
+            <div ref={googleMap3DRef} className="w-full h-full" />
+          )
         ) : (
           <CookieConsentHint
             services={["OpenStreetMap", "Google Maps"]}

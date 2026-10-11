@@ -56,6 +56,18 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    # Textdateien komprimiert ausliefern (JS-Bundle ~380 KB -> ~120 KB, OSM-Snapshot 113 KB -> 14 KB)
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_min_length 1024;
+    gzip_types text/css application/javascript application/json image/svg+xml text/plain;
+
+    # Solange die Seite noch nicht offiziell online ist:
+    # alle Suchmaschinen serverseitig vom Indexieren ausschliessen.
+    add_header X-Robots-Tag "noindex, nofollow" always;
+
     # Gehashte Assets aggressiv und unveraenderlich cachen
     location /assets/ {
         expires 1y;
