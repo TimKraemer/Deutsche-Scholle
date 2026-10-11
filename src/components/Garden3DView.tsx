@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { GOOGLE_3D_CONFIG, OSNABRUECK_BOUNDS } from "../utils/constants";
 import { loadGoogleMaps } from "../utils/googleMaps";
 import { calculateGardensBounds, calculateGeometryCenter } from "../utils/mapHelpers";
@@ -9,6 +9,37 @@ interface Garden3DViewProps {
   selectedNumber: string | null;
   // Umriss des ausgewählten Gartens (kann auch fehlen, wenn er nicht in allGardens ist)
   selectedGeometry?: Array<{ lat: number; lon: number }>;
+  // Unsichtbar wird die Karte schon an der Startposition vorgeladen
+  visible: boolean;
+  // Kamera kreist um die Gartenmitte
+  rotate: boolean;
+  // Nutzer greift selbst in die Karte ein (Ziehen, Scrollen): Drehung beenden
+  onUserInteraction?: () => void;
+}
+
+interface Camera {
+  center: { lat: number; lng: number; altitude: number };
+  range: number;
+  tilt: number;
+  heading: number;
+}
+
+// Viele Runden am Stück, damit die Drehung praktisch endlos läuft
+const ROTATION_ROUNDS = 1000;
+
+/**
+ * Kameraabstand, bei dem der Garten das Bild gut füllt: Diagonale in Metern mal Faktor
+ */
+function closeRange(geometry: Array<{ lat: number; lon: number }>): number {
+  const lats = geometry.map((p) => p.lat);
+  const lons = geometry.map((p) => p.lon);
+  const meanLat = ((Math.min(...lats) + Math.max(...lats)) / 2) * (Math.PI / 180);
+  const heightM = (Math.max(...lats) - Math.min(...lats)) * 111320;
+  const widthM = (Math.max(...lons) - Math.min(...lons)) * 111320 * Math.cos(meanLat);
+  return Math.max(
+    GOOGLE_3D_CONFIG.MIN_GARDEN_RANGE,
+    Math.hypot(heightM, widthM) * GOOGLE_3D_CONFIG.GARDEN_RANGE_FACTOR
+  );
 }
 
 /**
@@ -21,6 +52,9 @@ export default function Garden3DView({
   allGardens,
   selectedNumber,
   selectedGeometry,
+  visible,
+  rotate,
+  onUserInteraction,
 }: Garden3DViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -94,43 +128,70 @@ export default function Garden3DView({
     };
   }, [maps3d, allGardens, selectedNumber, selectedGeometry]);
 
-  // Kamera auf den ausgewählten Garten bzw. die ganze Anlage richten
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !maps3d) return;
-
-    let camera: { center: { lat: number; lng: number; altitude: number }; range: number } | null =
-      null;
-
+  // Startkamera: ganz nah am ausgewählten Garten, sonst Übersicht über die Anlage
+  const startCamera = useMemo((): Camera | null => {
     const selectedCenter = selectedGeometry ? calculateGeometryCenter(selectedGeometry) : null;
-    if (selectedCenter) {
+    if (selectedGeometry && selectedCenter) {
       const elevation = allGardens.find((g) => g.tags.ref === selectedNumber)?.elevation;
-      camera = {
+      return {
         center: {
           lat: selectedCenter.lat,
           lng: selectedCenter.lon,
           altitude: elevation ?? GOOGLE_3D_CONFIG.DEFAULT_ELEVATION,
         },
-        range: GOOGLE_3D_CONFIG.GARDEN_RANGE,
+        range: closeRange(selectedGeometry),
+        tilt: GOOGLE_3D_CONFIG.TILT,
+        heading: 0,
       };
-    } else if (allGardens.length > 0) {
-      const { minLat, maxLat, minLon, maxLon, hasValidBounds } = calculateGardensBounds(allGardens);
-      if (hasValidBounds) {
-        camera = {
-          center: {
-            lat: (minLat + maxLat) / 2,
-            lng: (minLon + maxLon) / 2,
-            altitude: GOOGLE_3D_CONFIG.DEFAULT_ELEVATION,
-          },
-          range: GOOGLE_3D_CONFIG.OVERVIEW_RANGE,
-        };
-      }
     }
 
-    if (camera) {
-      Object.assign(map, { ...camera, tilt: GOOGLE_3D_CONFIG.TILT, heading: 0 });
+    const { minLat, maxLat, minLon, maxLon, hasValidBounds } = calculateGardensBounds(allGardens);
+    if (!hasValidBounds) return null;
+    return {
+      center: {
+        lat: (minLat + maxLat) / 2,
+        lng: (minLon + maxLon) / 2,
+        altitude: GOOGLE_3D_CONFIG.DEFAULT_ELEVATION,
+      },
+      range: GOOGLE_3D_CONFIG.OVERVIEW_RANGE,
+      tilt: GOOGLE_3D_CONFIG.TILT,
+      heading: 0,
+    };
+  }, [allGardens, selectedNumber, selectedGeometry]);
+
+  // Merkt sich Kamera und Sichtbarkeit des letzten Durchlaufs, um zu erkennen, ob die Kamera
+  // zurückgesetzt werden muss oder nur die Drehung an- bzw. ausgeschaltet wurde
+  const lastStateRef = useRef<{ camera: Camera | null; visible: boolean } | null>(null);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !maps3d || !startCamera) return;
+
+    const last = lastStateRef.current;
+    lastStateRef.current = { camera: startCamera, visible };
+    const reset = !last || last.camera !== startCamera || last.visible !== visible;
+
+    map.stopCameraAnimation();
+    if (reset) {
+      // Auch unsichtbar an die Startposition, damit die Kacheln dort schon geladen sind
+      Object.assign(map, startCamera);
     }
-  }, [maps3d, allGardens, selectedNumber, selectedGeometry]);
+
+    if (visible && rotate && selectedGeometry) {
+      // Von der aktuellen Blickrichtung aus weiterdrehen, Mittelpunkt bleibt der Garten
+      map.flyCameraAround({
+        camera: {
+          center: startCamera.center,
+          range: map.range,
+          tilt: map.tilt,
+          heading: map.heading,
+        },
+        // Dauer einer Umrundung, nicht der gesamten Animation
+        durationMillis: GOOGLE_3D_CONFIG.ROTATION_SECONDS * 1000,
+        repeatCount: ROTATION_ROUNDS,
+      });
+    }
+  }, [maps3d, startCamera, visible, rotate, selectedGeometry]);
 
   if (loadError) {
     return (
@@ -140,5 +201,12 @@ export default function Garden3DView({
     );
   }
 
-  return <div ref={containerRef} className="w-full h-full" />;
+  return (
+    <div
+      ref={containerRef}
+      className="w-full h-full"
+      onPointerDown={rotate ? onUserInteraction : undefined}
+      onWheel={rotate ? onUserInteraction : undefined}
+    />
+  );
 }

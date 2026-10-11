@@ -374,11 +374,14 @@ export default function GardenMap({
     setMapType(type);
   };
 
-  // Steuert, ob das Luftbild als fotorealistisches 3D-Modell oder flach von oben angezeigt
-  // wird. Wahl wird in localStorage gespeichert (konsistent mit Sortier-/Filter-Prefs).
-  const [is3DEnabled, setIs3DEnabled] = useState<boolean>(() => {
-    return localStorage.getItem("gardenMap3DEnabled") !== "false";
-  });
+  // Luftbild startet flach von oben. Das 3D-Modell wird im Hintergrund vorgeladen und erst
+  // auf Klick eingeblendet, dann kreist die Kamera um den Garten (abschaltbar).
+  const [is3DEnabled, setIs3DEnabled] = useState(false);
+  const [isRotating, setIsRotating] = useState(true);
+  const toggle3D = () => {
+    setIs3DEnabled((prev) => !prev);
+    setIsRotating(true);
+  };
 
   // Zeige Labels in OSM-Ansicht wenn Zoom hoch genug ist (auch auf Detailseite)
   const showLabels = currentZoom >= MIN_ZOOM_FOR_LABELS && mapType === "osm";
@@ -497,10 +500,6 @@ export default function GardenMap({
   const googleMapPolygonRef = useRef<any>(null);
   const mapWrapperRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    localStorage.setItem("gardenMap3DEnabled", String(is3DEnabled));
-  }, [is3DEnabled]);
-
   // Stelle sicher, dass die Karte die volle Höhe des Parents nutzt
   useEffect(() => {
     const updateHeight = () => {
@@ -519,7 +518,7 @@ export default function GardenMap({
 
   // Flaches Google-Luftbild (Luftbild mit ausgeschaltetem 3D). Die 3D-Ansicht rendert Garden3DView.
   useEffect(() => {
-    if (mapType !== "3d" || is3DEnabled || !googleMap3DRef.current) {
+    if (mapType !== "3d" || !googleMap3DRef.current) {
       // Cleanup wenn nicht mehr im flachen Luftbild
       if (googleMapPolygonRef.current) {
         googleMapPolygonRef.current.setMap(null);
@@ -732,7 +731,6 @@ export default function GardenMap({
     };
   }, [
     mapType,
-    is3DEnabled,
     selectedGarden,
     osmGeometry,
     allGardens,
@@ -770,7 +768,7 @@ export default function GardenMap({
           </button>
           {mapType === "3d" && (
             <button
-              onClick={() => setIs3DEnabled((prev) => !prev)}
+              onClick={toggle3D}
               className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
                 is3DEnabled
                   ? "bg-scholle-green text-white"
@@ -786,21 +784,47 @@ export default function GardenMap({
               3D
             </button>
           )}
+          {mapType === "3d" && is3DEnabled && (
+            <button
+              onClick={() => setIsRotating((prev) => !prev)}
+              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                isRotating
+                  ? "bg-scholle-green text-white"
+                  : "bg-scholle-bg-light text-scholle-text hover:bg-scholle-border"
+              }`}
+              title={isRotating ? "Drehung anhalten" : "Kamera um den Garten drehen"}
+              aria-pressed={isRotating}
+            >
+              Drehen
+            </button>
+          )}
         </div>
       )}
 
-      {/* Google Luftbild: fotorealistisch in 3D oder flach von oben */}
+      {/* Fotorealistisches 3D-Modell: wird mit Google-Zustimmung schon vorgeladen (unsichtbar
+          an der Startposition) und liegt eingeblendet über dem flachen Luftbild */}
+      {!disable3D && cookiePreferences.googleMaps && cookiePreferences.openStreetMap && (
+        <div
+          className={`absolute inset-0 z-10 transition-opacity duration-300 ${
+            mapType === "3d" && is3DEnabled ? "opacity-100" : "opacity-0 pointer-events-none"
+          }`}
+          aria-hidden={!(mapType === "3d" && is3DEnabled)}
+        >
+          <Garden3DView
+            allGardens={allGardens}
+            selectedNumber={selectedGarden?.number ?? null}
+            selectedGeometry={selectedGarden ? osmGeometry : undefined}
+            visible={mapType === "3d" && is3DEnabled}
+            rotate={isRotating}
+            onUserInteraction={() => setIsRotating(false)}
+          />
+        </div>
+      )}
+
+      {/* Google Luftbild flach von oben (3D-Modell liegt als eigene Ebene darüber) */}
       {mapType === "3d" ? (
         cookiePreferences.googleMaps && cookiePreferences.openStreetMap ? (
-          is3DEnabled ? (
-            <Garden3DView
-              allGardens={allGardens}
-              selectedNumber={selectedGarden?.number ?? null}
-              selectedGeometry={selectedGarden ? osmGeometry : undefined}
-            />
-          ) : (
-            <div ref={googleMap3DRef} className="w-full h-full" />
-          )
+          <div ref={googleMap3DRef} className="w-full h-full" />
         ) : (
           <CookieConsentHint
             services={["OpenStreetMap", "Google Maps"]}

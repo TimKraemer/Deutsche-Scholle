@@ -28,9 +28,12 @@ export const GOOGLE_MAPS_CONFIG = {
 // Fotorealistische 3D-Ansicht (Google Map3DElement)
 // Ersetzt die 45°-Luftbilder, die Google mit Maps JS API 3.65 abgeschaltet hat.
 export const GOOGLE_3D_CONFIG = {
-  TILT: 55, // Neigung der Kamera in Grad (0 = senkrecht von oben)
-  GARDEN_RANGE: 160, // Abstand der Kamera zum Garten in Metern
+  TILT: 60, // Neigung der Kamera in Grad (0 = senkrecht von oben)
+  // Abstand zum Garten = Gartendiagonale × Faktor, mindestens MIN_GARDEN_RANGE Meter
+  GARDEN_RANGE_FACTOR: 1.3,
+  MIN_GARDEN_RANGE: 45,
   OVERVIEW_RANGE: 1400, // Abstand der Kamera in der Übersicht in Metern
+  ROTATION_SECONDS: 40, // Dauer einer Umrundung des Gartens
   // Geländehöhe über NN, falls für einen Garten keine Höhe im Snapshot steht.
   // Die Kamera zielt auf einen Punkt in absoluter Höhe, bei 0 läge er unter der Erde.
   DEFAULT_ELEVATION: 75,
