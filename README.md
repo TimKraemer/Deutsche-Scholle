@@ -52,6 +52,7 @@ Die Anwendung nutzt einen ausgeklügelten Algorithmus, um automatisch die richti
 - **Styling**: Tailwind CSS mit Custom Color Palette
 - **Karten**: Leaflet & React-Leaflet für OSM-Karten
 - **3D-Visualisierung**: Google Maps Map3DElement (fotorealistisches 3D-Modell) und flaches Satellitenbild
+- **Amtliches Luftbild**: LGLN DOP20 (Niedersachsen, 20 cm, CC BY 4.0), über `/lgln/dop` auf dem eigenen Server (nginx-Proxy mit Cache, lokal per Vite-Proxy)
 - **Routing**: React Router DOM
 - **Datenquelle**: OpenStreetMap (Snapshot aus der Overpass API, beim Build erzeugt)
 - **Code Quality**: Biome (Linter & Formatter), TypeScript strict mode

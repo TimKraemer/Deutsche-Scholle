@@ -1,127 +1,22 @@
 {
- "source": "https://www.deutsche-scholle-os.de/freie-gaerten/index.php",
- "fetchedAt": "2026-10-11T13:14:47+00:00",
- "changedAt": "2026-10-11",
- "columns": [
-  "Nr.",
-  "Parzelle",
-  "Größe",
-  "frei ab",
-  "Wertermittlung",
-  "Wertminderung"
- ],
- "rows": [
-  [
-   "156",
-   "Fleckendorfer Welle 7",
-   "360",
-   "sofort",
-   "",
-   ""
-  ],
-  [
-   "451",
-   "Heggemann",
-   "390",
-   "sofort",
-   "",
-   ""
-  ],
-  [
-   "664",
-   "Sonnenwinkel 1",
-   "508",
-   "01.01.2027",
-   "0,00 €",
-   "950,00 €"
-  ],
-  [
-   "275",
-   "Marienfelder Kamp",
-   "389",
-   "01.12.2026",
-   "",
-   ""
-  ],
-  [
-   "279*",
-   "Marienfelder Kamp",
-   "374",
-   "sofort",
-   "0,00 €",
-   "2.355,00 €"
-  ],
-  [
-   "261",
-   "Marienfelder Kamp",
-   "437",
-   "01.09.2026",
-   "",
-   ""
-  ],
-  [
-   "403",
-   "Burenkamp 1",
-   "520",
-   "30.09.2026",
-   "",
-   ""
-  ],
-  [
-   "417",
-   "Burenkamp 2",
-   "412",
-   "sofort",
-   "",
-   ""
-  ],
-  [
-   "499",
-   "Johannisgärten 3",
-   "405",
-   "01.01.2027",
-   "",
-   ""
-  ],
-  [
-   "529",
-   "Johannisgärten 4",
-   "370",
-   "01.08.2026",
-   "",
-   ""
-  ],
-  [
-   "452",
-   "Johannisgärten 5",
-   "405",
-   "sofort",
-   "591,44 €",
-   "1.200,00 €"
-  ],
-  [
-   "491",
-   "Johannisgärten 5",
-   "400",
-   "01.01.2027",
-   "",
-   ""
-  ],
-  [
-   "1002",
-   "Klostergärten 1",
-   "375",
-   "01.01.2027",
-   "",
-   ""
-  ],
-  [
-   "1007",
-   "Klostergärten 1",
-   "375",
-   "01.01.2027",
-   "",
-   ""
+  "source": "https://www.deutsche-scholle-os.de/freie-gaerten/index.php",
+  "fetchedAt": "2026-10-11T13:14:47+00:00",
+  "changedAt": "2026-10-11",
+  "columns": ["Nr.", "Parzelle", "Größe", "frei ab", "Wertermittlung", "Wertminderung"],
+  "rows": [
+    ["156", "Fleckendorfer Welle 7", "360", "sofort", "", ""],
+    ["451", "Heggemann", "390", "sofort", "", ""],
+    ["664", "Sonnenwinkel 1", "508", "01.01.2027", "0,00 €", "950,00 €"],
+    ["275", "Marienfelder Kamp", "389", "01.12.2026", "", ""],
+    ["279*", "Marienfelder Kamp", "374", "sofort", "0,00 €", "2.355,00 €"],
+    ["261", "Marienfelder Kamp", "437", "01.09.2026", "", ""],
+    ["403", "Burenkamp 1", "520", "30.09.2026", "", ""],
+    ["417", "Burenkamp 2", "412", "sofort", "", ""],
+    ["499", "Johannisgärten 3", "405", "01.01.2027", "", ""],
+    ["529", "Johannisgärten 4", "370", "01.08.2026", "", ""],
+    ["452", "Johannisgärten 5", "405", "sofort", "591,44 €", "1.200,00 €"],
+    ["491", "Johannisgärten 5", "400", "01.01.2027", "", ""],
+    ["1002", "Klostergärten 1", "375", "01.01.2027", "", ""],
+    ["1007", "Klostergärten 1", "375", "01.01.2027", "", ""]
   ]
- ]
 }

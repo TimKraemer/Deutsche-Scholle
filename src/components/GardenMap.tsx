@@ -8,6 +8,7 @@ import {
   Tooltip,
   useMap,
   useMapEvents,
+  WMSTileLayer,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import icon from "leaflet/dist/images/marker-icon.png";
@@ -18,6 +19,7 @@ import {
   GOOGLE_MAPS_CONFIG,
   INITIAL_MAP_CENTER,
   INITIAL_MAP_ZOOM,
+  LGLN_CONFIG,
   MIN_ZOOM_FOR_LABELS,
   OSNABRUECK_BOUNDS,
 } from "../utils/constants";
@@ -71,12 +73,17 @@ const HighlightedIcon = createGreenMarkerIcon(30);
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
+type MapType = "osm" | "satellite" | "3d" | "lgln";
+
 interface MapControllerProps {
   garden: Garden | null;
   osmGeometry?: Array<{ lat: number; lon: number }>;
+  // Maximaler Zoom und Rand beim Einpassen des Gartens
+  maxZoom?: number;
+  padding?: number;
 }
 
-function MapController({ garden, osmGeometry }: MapControllerProps) {
+function MapController({ garden, osmGeometry, maxZoom = 20, padding = 50 }: MapControllerProps) {
   const map = useMap();
 
   useEffect(() => {
@@ -107,8 +114,8 @@ function MapController({ garden, osmGeometry }: MapControllerProps) {
           ];
 
           map.fitBounds(bounds, {
-            padding: [50, 50], // Padding in Pixeln
-            maxZoom: 20, // Maximaler Zoom-Level für Detailansicht
+            padding: [padding, padding], // Padding in Pixeln
+            maxZoom, // Maximaler Zoom-Level für Detailansicht
           });
           return;
         }
@@ -125,8 +132,8 @@ function MapController({ garden, osmGeometry }: MapControllerProps) {
         ];
 
         map.fitBounds(bounds, {
-          padding: [50, 50],
-          maxZoom: 20,
+          padding: [padding, padding],
+          maxZoom,
         });
         return;
       }
@@ -138,7 +145,7 @@ function MapController({ garden, osmGeometry }: MapControllerProps) {
     }, 100);
 
     return () => clearTimeout(timer);
-  }, [garden, osmGeometry, map]);
+  }, [garden, osmGeometry, map, maxZoom, padding]);
 
   return null;
 }
@@ -276,7 +283,9 @@ function GardenPolygon({
       key={garden.id}
       positions={coords}
       pathOptions={{
-        color: isSelected ? "#22c55e" : "#6b7280",
+        // Auf Luftbildern helle Nachbarkonturen, grau wäre dort kaum zu sehen
+        color: isSelected ? "#22c55e" : mapType === "satellite" ? "#ffffff" : "#6b7280",
+        opacity: !isSelected && mapType === "satellite" ? 0.7 : 1,
         fillColor: isSelected ? "#22c55e" : "#9ca3af",
         fillOpacity: fillOpacity,
         weight: isSelected ? 2 : 1,
@@ -361,7 +370,7 @@ export default function GardenMap({
   // nur den Zustimmungs-Hinweis, obwohl die OSM-Karte verfügbar wäre.
   const preferredMapType =
     defaultMapType === "3d" && !cookiePreferences.googleMaps ? "osm" : defaultMapType;
-  const [mapType, setMapType] = useState<"osm" | "satellite" | "3d">(preferredMapType);
+  const [mapType, setMapType] = useState<MapType>(preferredMapType);
   // Folgt dem Standard nur, solange der Nutzer nicht selbst umgeschaltet hat
   const userPickedMapTypeRef = useRef(false);
   useEffect(() => {
@@ -369,7 +378,7 @@ export default function GardenMap({
       setMapType(preferredMapType);
     }
   }, [preferredMapType]);
-  const selectMapType = (type: "osm" | "3d") => {
+  const selectMapType = (type: MapType) => {
     userPickedMapTypeRef.current = true;
     setMapType(type);
   };
@@ -411,7 +420,7 @@ export default function GardenMap({
   const gardenPolygons = useMemo(() => {
     if (mapType === "3d") return []; // In 3D-Modus werden Polygone nicht gerendert
 
-    const effectiveMapType = mapType === "satellite" ? "satellite" : "osm";
+    const effectiveMapType = mapType === "osm" ? "osm" : "satellite";
     return allGardens.map((garden) => {
       const gardenRef = garden.tags.ref || "";
       const isSelected = !!(selectedGarden && selectedGarden.number === gardenRef);
@@ -766,6 +775,17 @@ export default function GardenMap({
           >
             Luftbild
           </button>
+          <button
+            onClick={() => selectMapType("lgln")}
+            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+              mapType === "lgln"
+                ? "bg-scholle-green text-white"
+                : "bg-scholle-bg-light text-scholle-text hover:bg-scholle-border"
+            }`}
+            title="Amtliches Luftbild Niedersachsen (LGLN, 20 cm Auflösung)"
+          >
+            LGLN
+          </button>
           {mapType === "3d" && (
             <button
               onClick={toggle3D}
@@ -838,7 +858,7 @@ export default function GardenMap({
           zoom={INITIAL_MAP_ZOOM}
           style={{ height: "100%", width: "100%", minHeight: "350px", flex: "1 1 0%" }}
           scrollWheelZoom={true}
-          maxZoom={mapType === "satellite" ? 22 : 19}
+          maxZoom={mapType === "osm" ? 19 : 22}
           minZoom={13}
           maxBounds={osnabrueckLeafletBounds}
           maxBoundsViscosity={1.0}
@@ -859,6 +879,16 @@ export default function GardenMap({
                 onOpenCookieConsent={onOpenCookieConsent}
               />
             )
+          ) : mapType === "lgln" ? (
+            // Amtliches Luftbild (DOP20) über den eigenen Server (/lgln/dop, nginx-Proxy mit
+            // Cache). Dadurch gehen keine Besucherdaten an das LGLN.
+            <WMSTileLayer
+              key="lgln"
+              url={LGLN_CONFIG.WMS_URL}
+              params={{ layers: LGLN_CONFIG.LAYER, format: "image/jpeg", transparent: false }}
+              attribution={`Luftbild &copy; <a href="https://www.lgln.niedersachsen.de">LGLN</a> (${new Date().getFullYear()}), <a href="https://creativecommons.org/licenses/by/4.0/deed.de">CC BY 4.0</a>`}
+              maxZoom={22}
+            />
           ) : (
             <>
               {/* Google Maps Satellite - Höchste Qualität */}
@@ -898,7 +928,18 @@ export default function GardenMap({
             </>
           )}
           {/* Controller für ausgewählten Garten */}
-          {selectedGarden && <MapController garden={selectedGarden} osmGeometry={osmGeometry} />}
+          {selectedGarden &&
+            (mapType === "lgln" ? (
+              // So nah wie möglich an den Garten
+              <MapController
+                garden={selectedGarden}
+                osmGeometry={osmGeometry}
+                maxZoom={LGLN_CONFIG.GARDEN_MAX_ZOOM}
+                padding={LGLN_CONFIG.GARDEN_PADDING}
+              />
+            ) : (
+              <MapController garden={selectedGarden} osmGeometry={osmGeometry} />
+            ))}
 
           {/* Controller für alle Gärten auf der Startseite */}
           {!selectedGarden && allGardens.length > 0 && (
@@ -917,7 +958,8 @@ export default function GardenMap({
             osmGeometry.length > 0 &&
             (() => {
               const gardenNumber = selectedGarden.number;
-              const isSatellite = mapType === "satellite";
+              // Luftbilder (LGLN): nur Kontur, damit das Bild sichtbar bleibt
+              const isSatellite = mapType !== "osm";
               const isAvailable = availableGardens.some((g) => g.number === gardenNumber);
               const isHovered = hoveredGardenNumber === gardenNumber;
               return (
@@ -927,7 +969,7 @@ export default function GardenMap({
                     color: "#22c55e",
                     fillColor: "#22c55e",
                     fillOpacity: isSatellite ? 0 : 0.3,
-                    weight: 2,
+                    weight: isSatellite ? 3 : 2,
                   }}
                   eventHandlers={
                     !isSatellite
