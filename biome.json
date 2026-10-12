@@ -14,7 +14,8 @@
       "!**/.next",
       "!**/build",
       "!**/coverage",
-      "!public/osm-gardens.json"
+      "!public/osm-gardens.json",
+      "!public/freie-gaerten.json"
     ]
   },
   "formatter": {

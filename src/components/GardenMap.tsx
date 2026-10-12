@@ -784,7 +784,7 @@ export default function GardenMap({
             }`}
             title="Amtliches Luftbild Niedersachsen (LGLN, 20 cm Auflösung)"
           >
-            LGLN
+            Luftbild2
           </button>
           {mapType === "3d" && (
             <button
