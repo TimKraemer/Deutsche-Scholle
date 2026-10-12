@@ -135,6 +135,8 @@ services:
     volumes:
       - "/var/www/www-scholle/:/usr/share/nginx/html:ro"
       - "/opt/services/scholle/default.conf:/etc/nginx/conf.d/default.conf:ro"
+      # Cache fuer das LGLN-Luftbild, ueberlebt das Neuerstellen des Containers
+      - "/var/cache/scholle-lgln/:/var/cache/nginx/lgln"
     image: nginx
     restart: always
     depends_on:
@@ -147,6 +149,11 @@ services:
       - LETSENCRYPT_HOST=scholle.tim-kraemer.de
       - LETSENCRYPT_EMAIL=tk@scortex.de
 ```
+
+The LGLN tile cache lives on the host in `/var/cache/scholle-lgln/` (owner `101:101`, the
+nginx user in the container), so it survives `dc up -d` recreations. It holds the pre-warmed
+tiles for zoom 19–21 of the whole site (~170 MB). Check it with
+`docker exec scholle-nginx du -sh /var/cache/nginx/lgln`.
 
 ### Start / restart the container (only if config changed)
 
