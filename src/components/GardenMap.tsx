@@ -387,10 +387,34 @@ export default function GardenMap({
   // auf Klick eingeblendet, dann kreist die Kamera um den Garten (abschaltbar).
   const [is3DEnabled, setIs3DEnabled] = useState(false);
   const [isRotating, setIsRotating] = useState(true);
-  const toggle3D = () => {
-    setIs3DEnabled((prev) => !prev);
-    setIsRotating(true);
+
+  // Die vier Ansichten der Knopfleiste, alle jederzeit anklickbar
+  type MapView = "karte" | "luftbild" | "luftbild2" | "3d";
+  const activeView: MapView =
+    mapType === "osm"
+      ? "karte"
+      : mapType === "lgln"
+        ? "luftbild2"
+        : mapType === "3d" && is3DEnabled
+          ? "3d"
+          : "luftbild";
+  const selectView = (view: MapView) => {
+    if (view === "karte") selectMapType("osm");
+    if (view === "luftbild2") selectMapType("lgln");
+    if (view === "luftbild" || view === "3d") selectMapType("3d");
+    setIs3DEnabled(view === "3d");
+    if (view === "3d") setIsRotating(true);
   };
+  const mapViews: { view: MapView; label: string; title: string }[] = [
+    { view: "karte", label: "Karte", title: "Straßenkarte (OpenStreetMap)" },
+    { view: "luftbild", label: "Luftbild", title: "Luftbild von oben (Google)" },
+    {
+      view: "luftbild2",
+      label: "Luftbild2",
+      title: "Amtliches Luftbild Niedersachsen (LGLN, 20 cm Auflösung)",
+    },
+    { view: "3d", label: "3D", title: "Fotorealistisches 3D-Modell (Google)" },
+  ];
 
   // Zeige Labels in OSM-Ansicht wenn Zoom hoch genug ist (auch auf Detailseite)
   const showLabels = currentZoom >= MIN_ZOOM_FOR_LABELS && mapType === "osm";
@@ -754,57 +778,23 @@ export default function GardenMap({
     >
       {/* Map Type Toggle - Nur anzeigen wenn Umschalten möglich ist */}
       {!disable3D && (
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-1001 bg-scholle-bg-container rounded-lg shadow-lg p-1 flex gap-1 border border-scholle-border">
-          <button
-            onClick={() => selectMapType("osm")}
-            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-              mapType === "osm"
-                ? "bg-scholle-green text-white"
-                : "bg-scholle-bg-light text-scholle-text hover:bg-scholle-border"
-            }`}
-          >
-            Karte
-          </button>
-          <button
-            onClick={() => selectMapType("3d")}
-            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-              mapType === "3d"
-                ? "bg-scholle-green text-white"
-                : "bg-scholle-bg-light text-scholle-text hover:bg-scholle-border"
-            }`}
-          >
-            Luftbild
-          </button>
-          <button
-            onClick={() => selectMapType("lgln")}
-            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-              mapType === "lgln"
-                ? "bg-scholle-green text-white"
-                : "bg-scholle-bg-light text-scholle-text hover:bg-scholle-border"
-            }`}
-            title="Amtliches Luftbild Niedersachsen (LGLN, 20 cm Auflösung)"
-          >
-            Luftbild2
-          </button>
-          {mapType === "3d" && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-1001 bg-scholle-bg-container rounded-lg shadow-lg p-1 flex flex-wrap justify-center gap-1 border border-scholle-border w-max max-w-[calc(100%-1rem)]">
+          {mapViews.map(({ view, label, title }) => (
             <button
-              onClick={toggle3D}
+              key={view}
+              onClick={() => selectView(view)}
               className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                is3DEnabled
+                activeView === view
                   ? "bg-scholle-green text-white"
                   : "bg-scholle-bg-light text-scholle-text hover:bg-scholle-border"
               }`}
-              title={
-                is3DEnabled
-                  ? "3D-Ansicht ausschalten (flaches Luftbild von oben)"
-                  : "3D-Ansicht einschalten (fotorealistisches 3D-Modell)"
-              }
-              aria-pressed={is3DEnabled}
+              title={title}
+              aria-pressed={activeView === view}
             >
-              3D
+              {label}
             </button>
-          )}
-          {mapType === "3d" && is3DEnabled && (
+          ))}
+          {activeView === "3d" && (
             <button
               onClick={() => setIsRotating((prev) => !prev)}
               className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
