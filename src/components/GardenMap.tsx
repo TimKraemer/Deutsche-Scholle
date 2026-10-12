@@ -23,7 +23,7 @@ import {
   MIN_ZOOM_FOR_LABELS,
   OSNABRUECK_BOUNDS,
 } from "../utils/constants";
-import { GOOGLE_MAPS_API_KEY, loadGoogleMaps } from "../utils/googleMaps";
+import { GOOGLE_MAPS_API_KEY, loadGoogleMaps, supportsObliqueImagery } from "../utils/googleMaps";
 import {
   applyBoundsPadding,
   calculateGardensBounds,
@@ -74,6 +74,21 @@ const HighlightedIcon = createGreenMarkerIcon(30);
 L.Marker.prototype.options.icon = DefaultIcon;
 
 type MapType = "osm" | "satellite" | "3d" | "lgln";
+
+/**
+ * Schaltet die Google-Rasterkarte zwischen Draufsicht und 45°-Schrägluftbild um.
+ * Schrägbilder gibt es nur ab Zoom 18 und bis Zoom 21, darum wird der Zoom eingegrenzt.
+ */
+function applyOblique(map: any, oblique: boolean) {
+  if (oblique) {
+    const zoom = map.getZoom() ?? GOOGLE_MAPS_CONFIG.GARDEN_ZOOM;
+    map.setZoom(Math.min(Math.max(zoom, 19), 21));
+    map.setTilt(45);
+  } else {
+    map.setTilt(0);
+  }
+  map.setHeading(0);
+}
 
 interface MapControllerProps {
   garden: Garden | null;
@@ -389,7 +404,14 @@ export default function GardenMap({
   const [isRotating, setIsRotating] = useState(true);
 
   // Die vier Ansichten der Knopfleiste, alle jederzeit anklickbar
-  type MapView = "karte" | "luftbild" | "luftbild2" | "3d";
+  type MapView = "karte" | "luftbild" | "schraeg" | "luftbild2" | "3d";
+
+  // 45°-Schrägluftbild: Google-Luftbild mit Neigung (nur mit Maps API 3.64 verfügbar)
+  const [isOblique, setIsOblique] = useState(false);
+  const isObliqueRef = useRef(isOblique);
+  isObliqueRef.current = isOblique;
+  const [obliqueAvailable, setObliqueAvailable] = useState(true);
+
   const activeView: MapView =
     mapType === "osm"
       ? "karte"
@@ -397,17 +419,25 @@ export default function GardenMap({
         ? "luftbild2"
         : mapType === "3d" && is3DEnabled
           ? "3d"
-          : "luftbild";
+          : mapType === "3d" && isOblique
+            ? "schraeg"
+            : "luftbild";
   const selectView = (view: MapView) => {
     if (view === "karte") selectMapType("osm");
     if (view === "luftbild2") selectMapType("lgln");
-    if (view === "luftbild" || view === "3d") selectMapType("3d");
+    if (view === "luftbild" || view === "schraeg" || view === "3d") selectMapType("3d");
     setIs3DEnabled(view === "3d");
+    setIsOblique(view === "schraeg");
     if (view === "3d") setIsRotating(true);
   };
   const mapViews: { view: MapView; label: string; title: string }[] = [
     { view: "karte", label: "Karte", title: "Straßenkarte (OpenStreetMap)" },
     { view: "luftbild", label: "Luftbild", title: "Luftbild von oben (Google)" },
+    {
+      view: "schraeg",
+      label: "45°",
+      title: "Schrägluftbild aus 45° (Google), Blickrichtung mit den Pfeilen rechts drehen",
+    },
     {
       view: "luftbild2",
       label: "Luftbild2",
@@ -530,6 +560,23 @@ export default function GardenMap({
 
   const googleMap3DRef = useRef<HTMLDivElement | null>(null);
   const googleMapInstanceRef = useRef<any>(null);
+
+  useEffect(() => {
+    const map = googleMapInstanceRef.current;
+    if (map) applyOblique(map, isOblique);
+  }, [isOblique]);
+
+  // 45° nur anbieten, solange Google die API-Version mit Schrägbildern noch ausliefert
+  useEffect(() => {
+    if (disable3D || !cookiePreferences.googleMaps) return;
+    loadGoogleMaps()
+      .then(() => {
+        const available = supportsObliqueImagery();
+        setObliqueAvailable(available);
+        if (!available) setIsOblique(false);
+      })
+      .catch(() => {});
+  }, [disable3D, cookiePreferences.googleMaps]);
   const googleMapPolygonRef = useRef<any>(null);
   const mapWrapperRef = useRef<HTMLDivElement>(null);
 
@@ -634,7 +681,9 @@ export default function GardenMap({
           : bounds.getCenter(),
         zoom: selectedGarden ? GOOGLE_MAPS_CONFIG.GARDEN_ZOOM : GOOGLE_MAPS_CONFIG.DEFAULT_ZOOM,
         mapTypeId: google.maps.MapTypeId.SATELLITE,
+        // Neigung erst nach dem Laden setzen: direkt beim Erzeugen bleibt die Karte sonst grau
         tilt: 0,
+        rotateControl: true,
         heading: 0,
         mapTypeControl: false,
         streetViewControl: false,
@@ -656,6 +705,9 @@ export default function GardenMap({
       });
 
       googleMapInstanceRef.current = map;
+      google.maps.event.addListenerOnce(map, "tilesloaded", () => {
+        if (isObliqueRef.current) applyOblique(map, true);
+      });
 
       // Zeige alle Gärten an
       for (const garden of allGardens) {
@@ -779,21 +831,23 @@ export default function GardenMap({
       {/* Map Type Toggle - Nur anzeigen wenn Umschalten möglich ist */}
       {!disable3D && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-1001 bg-scholle-bg-container rounded-lg shadow-lg p-1 flex flex-wrap justify-center gap-1 border border-scholle-border w-max max-w-[calc(100%-1rem)]">
-          {mapViews.map(({ view, label, title }) => (
-            <button
-              key={view}
-              onClick={() => selectView(view)}
-              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                activeView === view
-                  ? "bg-scholle-green text-white"
-                  : "bg-scholle-bg-light text-scholle-text hover:bg-scholle-border"
-              }`}
-              title={title}
-              aria-pressed={activeView === view}
-            >
-              {label}
-            </button>
-          ))}
+          {mapViews
+            .filter(({ view }) => view !== "schraeg" || obliqueAvailable)
+            .map(({ view, label, title }) => (
+              <button
+                key={view}
+                onClick={() => selectView(view)}
+                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                  activeView === view
+                    ? "bg-scholle-green text-white"
+                    : "bg-scholle-bg-light text-scholle-text hover:bg-scholle-border"
+                }`}
+                title={title}
+                aria-pressed={activeView === view}
+              >
+                {label}
+              </button>
+            ))}
           {activeView === "3d" && (
             <button
               onClick={() => setIsRotating((prev) => !prev)}
