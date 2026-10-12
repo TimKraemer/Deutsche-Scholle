@@ -38,12 +38,3 @@ export const GOOGLE_3D_CONFIG = {
   // Die Kamera zielt auf einen Punkt in absoluter Höhe, bei 0 läge er unter der Erde.
   DEFAULT_ELEVATION: 75,
 } as const;
-
-// Amtliches Luftbild Niedersachsen (DOP20, Open Data, CC BY 4.0)
-// Wird über den eigenen Server geholt (nginx-Proxy, im Dev-Server per Vite-Proxy).
-export const LGLN_CONFIG = {
-  WMS_URL: "/lgln/dop",
-  LAYER: "ni_dop20",
-  GARDEN_MAX_ZOOM: 22,
-  GARDEN_PADDING: 16, // Rand um den Garten in Pixeln
-} as const;

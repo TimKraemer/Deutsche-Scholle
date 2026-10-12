@@ -8,7 +8,6 @@ import {
   Tooltip,
   useMap,
   useMapEvents,
-  WMSTileLayer,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import icon from "leaflet/dist/images/marker-icon.png";
@@ -19,7 +18,6 @@ import {
   GOOGLE_MAPS_CONFIG,
   INITIAL_MAP_CENTER,
   INITIAL_MAP_ZOOM,
-  LGLN_CONFIG,
   MIN_ZOOM_FOR_LABELS,
   OSNABRUECK_BOUNDS,
 } from "../utils/constants";
@@ -73,7 +71,7 @@ const HighlightedIcon = createGreenMarkerIcon(30);
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
-type MapType = "osm" | "satellite" | "3d" | "lgln";
+type MapType = "osm" | "satellite" | "3d";
 
 /**
  * Schaltet die Google-Rasterkarte zwischen Draufsicht und 45°-Schrägluftbild um.
@@ -93,12 +91,9 @@ function applyOblique(map: any, oblique: boolean) {
 interface MapControllerProps {
   garden: Garden | null;
   osmGeometry?: Array<{ lat: number; lon: number }>;
-  // Maximaler Zoom und Rand beim Einpassen des Gartens
-  maxZoom?: number;
-  padding?: number;
 }
 
-function MapController({ garden, osmGeometry, maxZoom = 20, padding = 50 }: MapControllerProps) {
+function MapController({ garden, osmGeometry }: MapControllerProps) {
   const map = useMap();
 
   useEffect(() => {
@@ -129,8 +124,8 @@ function MapController({ garden, osmGeometry, maxZoom = 20, padding = 50 }: MapC
           ];
 
           map.fitBounds(bounds, {
-            padding: [padding, padding], // Padding in Pixeln
-            maxZoom, // Maximaler Zoom-Level für Detailansicht
+            padding: [50, 50], // Padding in Pixeln
+            maxZoom: 20, // Maximaler Zoom-Level für Detailansicht
           });
           return;
         }
@@ -147,8 +142,8 @@ function MapController({ garden, osmGeometry, maxZoom = 20, padding = 50 }: MapC
         ];
 
         map.fitBounds(bounds, {
-          padding: [padding, padding],
-          maxZoom,
+          padding: [50, 50],
+          maxZoom: 20,
         });
         return;
       }
@@ -160,7 +155,7 @@ function MapController({ garden, osmGeometry, maxZoom = 20, padding = 50 }: MapC
     }, 100);
 
     return () => clearTimeout(timer);
-  }, [garden, osmGeometry, map, maxZoom, padding]);
+  }, [garden, osmGeometry, map]);
 
   return null;
 }
@@ -404,7 +399,7 @@ export default function GardenMap({
   const [isRotating, setIsRotating] = useState(true);
 
   // Die vier Ansichten der Knopfleiste, alle jederzeit anklickbar
-  type MapView = "karte" | "luftbild" | "schraeg" | "luftbild2" | "3d";
+  type MapView = "karte" | "luftbild" | "schraeg" | "3d";
 
   // 45°-Schrägluftbild: Google-Luftbild mit Neigung (nur mit Maps API 3.64 verfügbar)
   const [isOblique, setIsOblique] = useState(false);
@@ -415,16 +410,13 @@ export default function GardenMap({
   const activeView: MapView =
     mapType === "osm"
       ? "karte"
-      : mapType === "lgln"
-        ? "luftbild2"
-        : mapType === "3d" && is3DEnabled
-          ? "3d"
-          : mapType === "3d" && isOblique
-            ? "schraeg"
-            : "luftbild";
+      : mapType === "3d" && is3DEnabled
+        ? "3d"
+        : mapType === "3d" && isOblique
+          ? "schraeg"
+          : "luftbild";
   const selectView = (view: MapView) => {
     if (view === "karte") selectMapType("osm");
-    if (view === "luftbild2") selectMapType("lgln");
     if (view === "luftbild" || view === "schraeg" || view === "3d") selectMapType("3d");
     setIs3DEnabled(view === "3d");
     setIsOblique(view === "schraeg");
@@ -437,11 +429,6 @@ export default function GardenMap({
       view: "schraeg",
       label: "45°",
       title: "Schrägluftbild aus 45° (Google), Blickrichtung mit den Pfeilen rechts drehen",
-    },
-    {
-      view: "luftbild2",
-      label: "Luftbild2",
-      title: "Amtliches Luftbild Niedersachsen (LGLN, 20 cm Auflösung)",
     },
     { view: "3d", label: "3D", title: "Fotorealistisches 3D-Modell (Google)" },
   ];
@@ -923,16 +910,6 @@ export default function GardenMap({
                 onOpenCookieConsent={onOpenCookieConsent}
               />
             )
-          ) : mapType === "lgln" ? (
-            // Amtliches Luftbild (DOP20) über den eigenen Server (/lgln/dop, nginx-Proxy mit
-            // Cache). Dadurch gehen keine Besucherdaten an das LGLN.
-            <WMSTileLayer
-              key="lgln"
-              url={LGLN_CONFIG.WMS_URL}
-              params={{ layers: LGLN_CONFIG.LAYER, format: "image/jpeg", transparent: false }}
-              attribution={`Luftbild &copy; <a href="https://www.lgln.niedersachsen.de">LGLN</a> (${new Date().getFullYear()}), <a href="https://creativecommons.org/licenses/by/4.0/deed.de">CC BY 4.0</a>`}
-              maxZoom={22}
-            />
           ) : (
             <>
               {/* Google Maps Satellite - Höchste Qualität */}
@@ -972,18 +949,7 @@ export default function GardenMap({
             </>
           )}
           {/* Controller für ausgewählten Garten */}
-          {selectedGarden &&
-            (mapType === "lgln" ? (
-              // So nah wie möglich an den Garten
-              <MapController
-                garden={selectedGarden}
-                osmGeometry={osmGeometry}
-                maxZoom={LGLN_CONFIG.GARDEN_MAX_ZOOM}
-                padding={LGLN_CONFIG.GARDEN_PADDING}
-              />
-            ) : (
-              <MapController garden={selectedGarden} osmGeometry={osmGeometry} />
-            ))}
+          {selectedGarden && <MapController garden={selectedGarden} osmGeometry={osmGeometry} />}
 
           {/* Controller für alle Gärten auf der Startseite */}
           {!selectedGarden && allGardens.length > 0 && (
@@ -1002,7 +968,7 @@ export default function GardenMap({
             osmGeometry.length > 0 &&
             (() => {
               const gardenNumber = selectedGarden.number;
-              // Luftbilder (LGLN): nur Kontur, damit das Bild sichtbar bleibt
+              // Luftbilder: nur Kontur, damit das Bild sichtbar bleibt
               const isSatellite = mapType !== "osm";
               const isAvailable = availableGardens.some((g) => g.number === gardenNumber);
               const isHovered = hoveredGardenNumber === gardenNumber;

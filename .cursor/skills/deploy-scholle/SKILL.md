@@ -54,9 +54,6 @@ Files on the server (`scortex:root` owns the web root; `/opt/services` needs `su
   `BrowserRouter` routes like `/:gardenNumber`, plus immutable caching for `/assets/`:
 
 ```nginx
-# Cache fuer das amtliche Luftbild (LGLN DOP20), siehe location /lgln/dop
-proxy_cache_path /var/cache/nginx/lgln levels=1:2 keys_zone=lgln:10m max_size=2g inactive=90d use_temp_path=off;
-
 server {
     listen 80;
     server_name _;
@@ -74,31 +71,6 @@ server {
     # Solange die Seite noch nicht offiziell online ist:
     # alle Suchmaschinen serverseitig vom Indexieren ausschliessen.
     add_header X-Robots-Tag "noindex, nofollow" always;
-
-    # Amtliches Luftbild Niedersachsen (LGLN DOP20, CC BY 4.0) ueber den eigenen Server:
-    # Besucher-IPs gehen nicht an das LGLN, Kacheln werden 30 Tage gecacht.
-    # Nur Kachelabrufe des Layers ni_dop20 in Kachelgroesse, kein offener Proxy.
-    location = /lgln/dop {
-        if ($arg_request != "GetMap") { return 403; }
-        if ($arg_layers != "ni_dop20") { return 403; }
-        if ($arg_width !~ "^(256|512)$") { return 403; }
-        if ($arg_height !~ "^(256|512)$") { return 403; }
-
-        proxy_pass https://opendata.lgln.niedersachsen.de/doorman/noauth/dop_wms;
-        proxy_ssl_server_name on;
-        proxy_set_header Host opendata.lgln.niedersachsen.de;
-        proxy_set_header Cookie "";
-        proxy_cache lgln;
-        proxy_cache_valid 200 30d;
-        proxy_cache_lock on;
-        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
-        proxy_ignore_headers Cache-Control Expires Set-Cookie;
-        proxy_hide_header Cache-Control;
-        proxy_hide_header Set-Cookie;
-        add_header Cache-Control "public, max-age=2592000" always;
-        add_header X-Cache-Status $upstream_cache_status always;
-        add_header X-Robots-Tag "noindex, nofollow" always;
-    }
 
     # Gehashte Assets aggressiv und unveraenderlich cachen
     location /assets/ {
@@ -135,8 +107,6 @@ services:
     volumes:
       - "/var/www/www-scholle/:/usr/share/nginx/html:ro"
       - "/opt/services/scholle/default.conf:/etc/nginx/conf.d/default.conf:ro"
-      # Cache fuer das LGLN-Luftbild, ueberlebt das Neuerstellen des Containers
-      - "/var/cache/scholle-lgln/:/var/cache/nginx/lgln"
     image: nginx
     restart: always
     depends_on:
@@ -149,11 +119,6 @@ services:
       - LETSENCRYPT_HOST=scholle.tim-kraemer.de
       - LETSENCRYPT_EMAIL=tk@scortex.de
 ```
-
-The LGLN tile cache lives on the host in `/var/cache/scholle-lgln/` (owner `101:101`, the
-nginx user in the container), so it survives `dc up -d` recreations. It holds the pre-warmed
-tiles for zoom 19–21 of the whole site (~170 MB). Check it with
-`docker exec scholle-nginx du -sh /var/cache/nginx/lgln`.
 
 ### Start / restart the container (only if config changed)
 
