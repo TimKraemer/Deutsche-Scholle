@@ -36,6 +36,14 @@ interface MissingOsmGarden {
   parcel: string;
 }
 
+/** Ein freier Garten, dessen Parzelle in der Vereinsliste anders lautet als in OSM */
+interface ParcelMismatch {
+  number: string;
+  listParcel: string;
+  osmParcel: string;
+  wayId: number;
+}
+
 // Erwarteter Bereich der Gartennummern im Verein: 1 bis 1058 (durchgehend).
 // Wird genutzt, um zu prüfen, welche Nummern noch nicht in OSM erfasst sind.
 const GARDEN_NUMBER_MIN = 1;
@@ -46,6 +54,7 @@ interface DebugResults {
   comparisons: GardenSizeComparison[];
   duplicates: DuplicateOsmGarden[];
   missingInOsm: MissingOsmGarden[];
+  parcelMismatches: ParcelMismatch[];
   generatedAt: number | null; // Stand der OSM-Daten
 }
 
@@ -54,6 +63,7 @@ export default function DebugPage() {
   const [comparisons, setComparisons] = useState<GardenSizeComparison[]>([]);
   const [duplicates, setDuplicates] = useState<DuplicateOsmGarden[]>([]);
   const [missingInOsm, setMissingInOsm] = useState<MissingOsmGarden[]>([]);
+  const [parcelMismatches, setParcelMismatches] = useState<ParcelMismatch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [generatedAt, setGeneratedAt] = useState<number | null>(null);
@@ -66,6 +76,7 @@ export default function DebugPage() {
     setComparisons(results.comparisons);
     setDuplicates(results.duplicates);
     setMissingInOsm(results.missingInOsm);
+    setParcelMismatches(results.parcelMismatches);
     setGeneratedAt(results.generatedAt);
   }, []);
 
@@ -80,10 +91,12 @@ export default function DebugPage() {
 
     let allOsmGardens: any[] = [];
     let osmGeneratedAt: number | null = null;
+    let osmParcels: Record<string, string | null> = {};
     try {
       const data = forceRefresh ? await refreshGardenData() : await getGardenData();
       allOsmGardens = data.gardens;
       osmGeneratedAt = data.generatedAt;
+      osmParcels = data.parcels;
     } catch (error) {
       console.error("Error loading all gardens:", error);
     }
@@ -140,6 +153,23 @@ export default function DebugPage() {
       }
     }
 
+    // Freie Gärten, deren Garten-Umriss in OSM in einer anders benannten Parzelle liegt.
+    // Ohne erkannte OSM-Parzelle gibt es nichts zu vergleichen.
+    const parcelMismatches: ParcelMismatch[] = [];
+    for (const listGarden of freeGardens) {
+      const osmWay = allOsmGardens.find((osm) => osm.tags?.ref === listGarden.number);
+      const osmParcel = osmWay ? osmParcels[osmWay.id] : null;
+      if (osmWay && osmParcel && listGarden.parcel.trim() !== osmParcel.trim()) {
+        parcelMismatches.push({
+          number: listGarden.number,
+          listParcel: listGarden.parcel,
+          osmParcel,
+          wayId: osmWay.id,
+        });
+      }
+    }
+    parcelMismatches.sort((a, b) => (parseInt(a.number, 10) || 0) - (parseInt(b.number, 10) || 0));
+
     // Verarbeite jeden Garten aus der Datenbank
     for (const listGarden of freeGardens) {
       const dbSize = listGarden.size || 0;
@@ -193,6 +223,7 @@ export default function DebugPage() {
       comparisons: results,
       duplicates: duplicateGardens,
       missingInOsm: missingGardens,
+      parcelMismatches,
       generatedAt: osmGeneratedAt,
     };
   }, []);
@@ -357,7 +388,7 @@ export default function DebugPage() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
               {/* Gartennummern, die in OSM nicht gefunden wurden */}
               <div className="bg-scholle-bg-container rounded-lg border border-scholle-border shadow-xs overflow-hidden">
                 <div className="bg-red-600 text-white px-4 py-3 flex items-center justify-between">
@@ -439,6 +470,54 @@ export default function DebugPage() {
                 )}
                 <div className="px-4 py-2 bg-scholle-bg-light border-t border-scholle-border text-xs text-scholle-text-light">
                   ref-Werte, die in OSM mehreren Ways zugeordnet sind.
+                </div>
+              </div>
+
+              {/* Freie Gärten, deren Parzelle in Vereinsliste und OSM verschieden ist */}
+              <div className="bg-scholle-bg-container rounded-lg border border-scholle-border shadow-xs overflow-hidden">
+                <div className="bg-scholle-blue text-white px-4 py-3 flex items-center justify-between">
+                  <h2 className="text-sm font-semibold">Parzelle widerspricht Vereinsliste</h2>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-white/20">
+                    {parcelMismatches.length}
+                  </span>
+                </div>
+                {parcelMismatches.length === 0 ? (
+                  <p className="px-4 py-6 text-sm text-scholle-text-light text-center">
+                    Bei allen freien Gärten stimmt die Parzelle mit OSM überein.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-scholle-border">
+                    {parcelMismatches.map((m) => (
+                      <li
+                        key={m.number}
+                        className="flex items-start justify-between gap-3 px-4 py-2"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleRowClick(m.number)}
+                          className="text-sm font-medium text-scholle-text hover:text-scholle-blue transition-colors"
+                        >
+                          {m.number}
+                        </button>
+                        <span className="flex flex-col items-end text-xs text-right">
+                          <span className="text-scholle-text">Verein: {m.listParcel}</span>
+                          <span className="text-scholle-text-light">OSM: {m.osmParcel}</span>
+                          <a
+                            href={`https://www.openstreetmap.org/way/${m.wayId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-scholle-blue hover:text-scholle-blue-dark underline"
+                          >
+                            way/{m.wayId}
+                          </a>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="px-4 py-2 bg-scholle-bg-light border-t border-scholle-border text-xs text-scholle-text-light">
+                  Freie Gärten, deren Umriss in OSM in einer anders benannten Parzelle liegt. Falsch
+                  ist entweder der Gartenumriss (ref) oder die Parzellenfläche in OSM.
                 </div>
               </div>
             </div>
