@@ -1,12 +1,12 @@
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import type { CookiePreferences } from "../types/cookies";
 import { loadCookiePreferences } from "../utils/cookies";
 
 /**
  * Verwaltet die Cookie-Präferenzen (Google Maps / OpenStreetMap).
  *
- * Liest die gespeicherten Präferenzen beim ersten Render und stellt einen Handler
- * bereit, der die Zustimmung aus der Cookie-Consent-Komponente übernimmt.
+ * Liest die gespeicherten Präferenzen beim ersten Render. handleConsentChange übernimmt
+ * die Entscheidung aus der Cookie-Consent-Komponente.
  * Wird sowohl von der Startseite als auch von der Detailseite genutzt.
  */
 export function useCookiePreferences() {
@@ -15,15 +15,5 @@ export function useCookiePreferences() {
   const [cookiePreferences, setCookiePreferences] =
     useState<CookiePreferences>(loadCookiePreferences);
 
-  const handleConsentChange = useCallback(
-    (preferences: { googleMaps: boolean | null; openStreetMap: boolean | null }) => {
-      setCookiePreferences({
-        googleMaps: preferences.googleMaps === true,
-        openStreetMap: preferences.openStreetMap === true,
-      });
-    },
-    []
-  );
-
-  return { cookiePreferences, setCookiePreferences, handleConsentChange };
+  return { cookiePreferences, handleConsentChange: setCookiePreferences };
 }

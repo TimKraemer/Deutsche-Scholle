@@ -506,7 +506,7 @@ function calculatePolygonArea(geometry: Array<{ lat: number; lon: number }>): nu
  * Konvertiert OSM Way zu Garden-Format
  * @param osmWay Der OSM Way für den Garten
  * @param listData Optionale Daten aus der Vereinsliste der freien Gärten
- * @param enclosingParcel Die umschließende Parzelle aus OSM (optional)
+ * @param enclosingParcel Die umschließende Parzelle aus OSM, gilt nur ohne Eintrag in der Vereinsliste
  */
 export function osmWayToGarden(
   osmWay: OSMWay,
@@ -534,20 +534,18 @@ export function osmWayToGarden(
   // Berechne Fläche aus OSM-Geometrie
   const calculatedSize = calculatePolygonArea(osmWay.geometry);
 
-  // Verwende umschließende Parzelle aus OSM, falls vorhanden, sonst Mock-Daten
-  const parcel = enclosingParcel || listData?.parcel || "";
+  // Die Vereinsliste ist maßgeblich, die aus OSM erratene Parzelle nur Ersatz
+  const parcel = listData?.parcel || enclosingParcel || "";
 
   return {
     id: `garden-${osmWay.id}`,
     number: osmWay.tags.ref || "", // ref ist das Standard-Tag für Gartennummern
-    parcel: parcel,
+    parcel,
     size: listData?.size || 0, // Datenbank-Größe
     osmSize: calculatedSize, // OSM-Größe (immer setzen, auch wenn 0)
     availableFrom: listData?.availableFrom || "",
     valuation: listData?.valuation || 0,
     valueReduction: listData?.valueReduction || 0,
-    hasElectricity: listData?.hasElectricity, // Optional: nur wenn bekannt
-    waterConnection: listData?.waterConnection, // Optional: nur wenn bekannt
     coordinates: [centerLat, centerLon] as [number, number],
     bounds: [
       [minLat, minLon],

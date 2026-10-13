@@ -22,6 +22,43 @@ export interface FilterValues {
   onlyAvailableNow: boolean;
 }
 
+// Grenzen, wenn keine Gärten geladen sind
+const FALLBACK_RANGES: FilterRanges = { minPrice: 0, maxPrice: 1200, minSize: 350, maxSize: 450 };
+
+/**
+ * Slider-Grenzen aus den Gärten, nach außen gerundet auf die Schrittweite der Slider
+ * (50 € / 10 m²). So sind die Grenzwerte mit dem Slider erreichbar und kein Garten fällt heraus.
+ */
+export function calculateRanges(gardens: Garden[]): FilterRanges {
+  const prices = gardens.map((g) => gardenValueToNumber(g.valuation));
+  const sizes = gardens.map((g) => g.size).filter((s) => s > 0);
+  if (gardens.length === 0) {
+    return FALLBACK_RANGES;
+  }
+  return {
+    minPrice: 0,
+    maxPrice: Math.ceil(Math.max(...prices, 0) / 50) * 50,
+    minSize: sizes.length ? Math.floor(Math.min(...sizes) / 10) * 10 : FALLBACK_RANGES.minSize,
+    maxSize: sizes.length ? Math.ceil(Math.max(...sizes) / 10) * 10 : FALLBACK_RANGES.maxSize,
+  };
+}
+
+/** Heutiges Datum als YYYY-MM-DD in Ortszeit, vergleichbar mit availableFrom */
+function todayIso(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+/** "sofort" oder ein Datum, das heute oder früher ist */
+export function isAvailableNow(availableFrom: string, today: string = todayIso()): boolean {
+  const value = availableFrom.toLowerCase();
+  if (value === "sofort" || value === "ab sofort") {
+    return true;
+  }
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && value <= today;
+}
+
 /**
  * Wendet Filter auf Gärten an
  * Diese Funktion wird sowohl auf der Startseite als auch auf der Detailseite verwendet,
@@ -35,58 +72,50 @@ export function applyGardenFilters(gardens: Garden[], filters: FilterValues): Ga
       return false;
     }
 
-    // Größen-Filter
-    if (garden.size < filters.minSize || garden.size > filters.maxSize) {
+    // Größe 0 heißt: in der Vereinsliste nicht lesbar. Solche Gärten nicht verstecken.
+    if (garden.size > 0 && (garden.size < filters.minSize || garden.size > filters.maxSize)) {
       return false;
     }
 
-    // "Nur frei ab sofort" Filter
-    if (filters.onlyAvailableNow) {
-      const lowerCaseDate = garden.availableFrom.toLowerCase();
-      if (lowerCaseDate !== "sofort" && lowerCaseDate !== "ab sofort") {
-        return false;
-      }
+    if (filters.onlyAvailableNow && !isAvailableNow(garden.availableFrom)) {
+      return false;
     }
 
     return true;
   });
 }
 
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
 /**
- * Lädt Filter-Werte aus localStorage
- * Gibt Standard-Werte zurück wenn keine gespeichert sind. Eine als null gespeicherte Grenze
+ * Lädt Filter-Werte aus localStorage, begrenzt auf die aktuellen Grenzen.
+ * Gibt die Grenzen zurück wenn nichts gespeichert ist. Eine als null gespeicherte Grenze
  * hat der Nutzer nicht verändert, sie folgt der aktuellen Liste.
  */
-export function loadFiltersFromStorage(defaultRanges: FilterRanges): FilterValues {
+export function loadFiltersFromStorage(ranges: FilterRanges): FilterValues {
+  let parsed: Record<string, unknown> = {};
   try {
     const saved = localStorage.getItem("gardenFilters");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      // Validiere gespeicherte Werte
-      if (
-        RANGE_KEYS.every((key) => parsed[key] === null || typeof parsed[key] === "number") &&
-        typeof parsed.onlyAvailableNow === "boolean"
-      ) {
-        return {
-          minPrice: parsed.minPrice ?? defaultRanges.minPrice,
-          maxPrice: parsed.maxPrice ?? defaultRanges.maxPrice,
-          minSize: parsed.minSize ?? defaultRanges.minSize,
-          maxSize: parsed.maxSize ?? defaultRanges.maxSize,
-          onlyAvailableNow: parsed.onlyAvailableNow,
-        };
-      }
+    const candidate = saved ? JSON.parse(saved) : {};
+    // Validiere gespeicherte Werte
+    if (
+      RANGE_KEYS.every((key) => candidate[key] === null || typeof candidate[key] === "number") &&
+      typeof candidate.onlyAvailableNow === "boolean"
+    ) {
+      parsed = candidate;
     }
   } catch (error) {
     console.error("Error loading filters from storage:", error);
   }
 
-  // Fallback: Standard-Werte (alle Filter deaktiviert)
+  const value = (key: (typeof RANGE_KEYS)[number], min: number, max: number) =>
+    clamp((parsed[key] as number | null | undefined) ?? ranges[key], min, max);
   return {
-    minPrice: defaultRanges.minPrice,
-    maxPrice: defaultRanges.maxPrice,
-    minSize: defaultRanges.minSize,
-    maxSize: defaultRanges.maxSize,
-    onlyAvailableNow: false,
+    minPrice: value("minPrice", ranges.minPrice, ranges.maxPrice),
+    maxPrice: value("maxPrice", ranges.minPrice, ranges.maxPrice),
+    minSize: value("minSize", ranges.minSize, ranges.maxSize),
+    maxSize: value("maxSize", ranges.minSize, ranges.maxSize),
+    onlyAvailableNow: parsed.onlyAvailableNow === true,
   };
 }
 
@@ -95,12 +124,12 @@ export function loadFiltersFromStorage(defaultRanges: FilterRanges): FilterValue
  * Grenzen auf dem Standardwert werden als null gespeichert. Sonst würde ein später
  * hinzugekommener größerer oder teurerer Garten beim nächsten Besuch ausgefiltert.
  */
-export function saveFiltersToStorage(filters: FilterValues, defaultRanges: FilterRanges): void {
+export function saveFiltersToStorage(filters: FilterValues, ranges: FilterRanges): void {
   const stored: Record<string, number | boolean | null> = {
     onlyAvailableNow: filters.onlyAvailableNow,
   };
   for (const key of RANGE_KEYS) {
-    stored[key] = filters[key] === defaultRanges[key] ? null : filters[key];
+    stored[key] = filters[key] === ranges[key] ? null : filters[key];
   }
   try {
     localStorage.setItem("gardenFilters", JSON.stringify(stored));
@@ -110,17 +139,14 @@ export function saveFiltersToStorage(filters: FilterValues, defaultRanges: Filte
 }
 
 /**
- * Prüft ob Filter aktiv sind (d.h. von Standard-Werten abweichen)
- *
- * @param filters Aktuelle Filter-Werte
- * @param defaultRanges Gerundete Standard-Werte (für Vergleich)
+ * Prüft ob Filter aktiv sind (d.h. von den Slider-Grenzen abweichen)
  */
-export function hasActiveFilters(filters: FilterValues, defaultRanges: FilterRanges): boolean {
+export function hasActiveFilters(filters: FilterValues, ranges: FilterRanges): boolean {
   return (
-    filters.minPrice !== defaultRanges.minPrice ||
-    filters.maxPrice !== defaultRanges.maxPrice ||
-    filters.minSize !== defaultRanges.minSize ||
-    filters.maxSize !== defaultRanges.maxSize ||
+    filters.minPrice !== ranges.minPrice ||
+    filters.maxPrice !== ranges.maxPrice ||
+    filters.minSize !== ranges.minSize ||
+    filters.maxSize !== ranges.maxSize ||
     filters.onlyAvailableNow
   );
 }

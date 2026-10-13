@@ -109,5 +109,4 @@ export function clearExpiredCache(): void {
  */
 export const CacheKeys = {
   GARDEN_DATA: "garden_data",
-  DEBUG_RESULTS: "debug_results",
 } as const;

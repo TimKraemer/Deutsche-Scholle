@@ -24,5 +24,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Tests laufen mit "bun test", dessen Typen (bun:test) sind hier nicht installiert
+  "exclude": ["src/**/*.test.ts"]
 }

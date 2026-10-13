@@ -12,12 +12,10 @@
     "lint:fix": "bunx @biomejs/biome check --write --unsafe --max-diagnostics=200 .",
     "format": "bunx @biomejs/biome format --write .",
     "format:check": "bunx @biomejs/biome format .",
-    "preview": "bun run vite preview"
+    "preview": "bun run vite preview",
+    "test": "bun test"
   },
   "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
-    "@mui/material": "^9.0.1",
     "@types/leaflet": "^1.9.21",
     "leaflet": "^1.9.4",
     "react": "^19.2.7",

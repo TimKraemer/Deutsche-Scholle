@@ -71,7 +71,7 @@ const HighlightedIcon = createGreenMarkerIcon(30);
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
-type MapType = "osm" | "satellite" | "3d";
+type MapType = "osm" | "3d";
 
 /**
  * Schaltet die Google-Rasterkarte zwischen Draufsicht und 45°-Schrägluftbild um.
@@ -100,58 +100,21 @@ function MapController({ garden, osmGeometry }: MapControllerProps) {
     // Warte kurz, damit die Karte ihre Größe bestimmen kann
     // React-Leaflet braucht Zeit für initiales Rendering, sonst sind getSize() Werte falsch
     const timer = setTimeout(() => {
-      if (!garden) return;
+      const validPoints = (osmGeometry ?? []).filter((point) =>
+        isValidCoordinate(point.lat, point.lon)
+      );
+      if (!garden || validPoints.length < 3) return;
 
-      // Priorität 1: Verwende osmGeometry wenn verfügbar (präziseste Darstellung)
-      if (osmGeometry && osmGeometry.length > 0) {
-        // Validiere alle Koordinaten
-        const validPoints = osmGeometry.filter((point) => isValidCoordinate(point.lat, point.lon));
-
-        if (validPoints.length >= 3) {
-          // Berechne Bounds aus dem Polygon
-          const lats = validPoints.map((p) => p.lat);
-          const lons = validPoints.map((p) => p.lon);
-          const minLat = Math.min(...lats);
-          const maxLat = Math.max(...lats);
-          const minLon = Math.min(...lons);
-          const maxLon = Math.max(...lons);
-
-          // Verwende fitBounds für optimales Zoomen und Zentrieren
-          // Padding sorgt dafür, dass der Garten nicht am Rand klebt
-          const bounds: [[number, number], [number, number]] = [
-            [minLat, minLon],
-            [maxLat, maxLon],
-          ];
-
-          map.fitBounds(bounds, {
-            padding: [50, 50], // Padding in Pixeln
-            maxZoom: 20, // Maximaler Zoom-Level für Detailansicht
-          });
-          return;
-        }
-      }
-
-      // Priorität 2: Verwende garden.bounds wenn verfügbar
-      if (garden.bounds) {
-        const [[minLat, minLon], [maxLat, maxLon]] = garden.bounds;
-
-        // Verwende fitBounds für optimales Zoomen und Zentrieren
-        const bounds: [[number, number], [number, number]] = [
-          [minLat, minLon],
-          [maxLat, maxLon],
-        ];
-
-        map.fitBounds(bounds, {
-          padding: [50, 50],
-          maxZoom: 20,
-        });
-        return;
-      }
-
-      // Priorität 3: Fallback auf Koordinaten mit festem Zoom-Level
-      if (garden.coordinates) {
-        map.setView(garden.coordinates, GOOGLE_MAPS_CONFIG.GARDEN_ZOOM);
-      }
+      const lats = validPoints.map((p) => p.lat);
+      const lons = validPoints.map((p) => p.lon);
+      // Padding sorgt dafür, dass der Garten nicht am Rand klebt
+      map.fitBounds(
+        [
+          [Math.min(...lats), Math.min(...lons)],
+          [Math.max(...lats), Math.max(...lons)],
+        ],
+        { padding: [50, 50], maxZoom: 20 }
+      );
     }, 100);
 
     return () => clearTimeout(timer);
@@ -173,7 +136,6 @@ interface AllGardensMapControllerProps {
  */
 function AllGardensMapController({ allGardens }: AllGardensMapControllerProps) {
   const map = useMap();
-  const lastGardensCountRef = useRef(0);
 
   useEffect(() => {
     // Nur aktualisieren wenn Gärten vorhanden sind
@@ -192,8 +154,6 @@ function AllGardensMapController({ allGardens }: AllGardensMapControllerProps) {
         map.fitBounds(bounds, {
           padding: [50, 50],
         });
-
-        lastGardensCountRef.current = allGardens.length;
       }
     }, 100);
 
@@ -254,7 +214,6 @@ interface GardenPolygonProps {
   isSelected: boolean;
   showLabels: boolean;
   onGardenClick: (gardenNumber: string) => void;
-  mapType: "osm" | "satellite";
   isAvailable?: boolean; // Ist der Garten ein freier Garten?
   hoveredGardenNumber?: string | null;
   onGardenHover?: (gardenNumber: string | null) => void;
@@ -265,7 +224,6 @@ function GardenPolygon({
   isSelected,
   showLabels,
   onGardenClick,
-  mapType,
   isAvailable = false,
   hoveredGardenNumber,
   onGardenHover,
@@ -277,38 +235,26 @@ function GardenPolygon({
   const isHovered = hoveredGardenNumber === gardenNumber;
 
   const handleClick = () => {
-    // In Satellitenansicht keine Klicks erlauben
-    if (mapType === "satellite") return;
     if (gardenNumber) {
       onGardenClick(gardenNumber);
     }
   };
-
-  // In Satellitenansicht: Nur Kontur, keine Füllung
-  const fillOpacity = mapType === "satellite" ? 0 : isSelected ? 0.3 : 0.1;
-  const isClickable = mapType !== "satellite";
 
   return (
     <Polygon
       key={garden.id}
       positions={coords}
       pathOptions={{
-        // Auf Luftbildern helle Nachbarkonturen, grau wäre dort kaum zu sehen
-        color: isSelected ? "#22c55e" : mapType === "satellite" ? "#ffffff" : "#6b7280",
-        opacity: !isSelected && mapType === "satellite" ? 0.7 : 1,
+        color: isSelected ? "#22c55e" : "#6b7280",
         fillColor: isSelected ? "#22c55e" : "#9ca3af",
-        fillOpacity: fillOpacity,
+        fillOpacity: isSelected ? 0.3 : 0.1,
         weight: isSelected ? 2 : 1,
       }}
-      eventHandlers={
-        isClickable
-          ? {
-              click: handleClick,
-              mouseover: () => onGardenHover?.(gardenNumber),
-              mouseout: () => onGardenHover?.(null),
-            }
-          : {}
-      }
+      eventHandlers={{
+        click: handleClick,
+        mouseover: () => onGardenHover?.(gardenNumber),
+        mouseout: () => onGardenHover?.(null),
+      }}
     >
       {gardenNumber && showLabels && (
         <Tooltip
@@ -318,9 +264,7 @@ function GardenPolygon({
           opacity={1}
         >
           <span
-            className={`font-semibold transition-all ${
-              isClickable ? "cursor-pointer" : "cursor-default"
-            } ${
+            className={`font-semibold transition-all cursor-pointer ${
               isAvailable
                 ? isHovered
                   ? "text-white bg-scholle-green-dark text-lg px-2 py-1 rounded-sm"
@@ -329,16 +273,12 @@ function GardenPolygon({
                   ? "text-scholle-green-dark"
                   : "text-scholle-text hover:text-scholle-green"
             }`}
-            onClick={
-              isClickable
-                ? (e) => {
-                    e.stopPropagation();
-                    handleClick();
-                  }
-                : undefined
-            }
-            onMouseEnter={isClickable ? () => onGardenHover?.(gardenNumber) : undefined}
-            onMouseLeave={isClickable ? () => onGardenHover?.(null) : undefined}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleClick();
+            }}
+            onMouseEnter={() => onGardenHover?.(gardenNumber)}
+            onMouseLeave={() => onGardenHover?.(null)}
           >
             {gardenNumber}
           </span>
@@ -449,19 +389,20 @@ export default function GardenMap({
     [availableGardens]
   );
 
-  // Memoize OSM garden map for faster lookups
-  // Map verwendet für O(1) Lookup-Performance statt O(n) mit Array.find()
-  const osmGardenMap = useMemo(
-    () => new Map(allGardens.map((g) => [g.tags.ref || "", g])),
-    [allGardens]
-  );
+  // Gartennummer -> OSM-Garten. Bei doppelten Nummern gilt wie in findOsmGarden der erste Treffer.
+  const osmGardenMap = useMemo(() => {
+    const byRef = new Map<string, OSMWay>();
+    for (const garden of allGardens) {
+      if (!byRef.has(garden.tags.ref)) byRef.set(garden.tags.ref, garden);
+    }
+    return byRef;
+  }, [allGardens]);
 
   // Memoize garden polygons (only render when not in 3D mode)
   // Verhindert unnötige Neuberechnung bei jedem Render (Performance-Optimierung)
   const gardenPolygons = useMemo(() => {
     if (mapType === "3d") return []; // In 3D-Modus werden Polygone nicht gerendert
 
-    const effectiveMapType = mapType === "osm" ? "osm" : "satellite";
     return allGardens.map((garden) => {
       const gardenRef = garden.tags.ref || "";
       const isSelected = !!(selectedGarden && selectedGarden.number === gardenRef);
@@ -473,7 +414,6 @@ export default function GardenMap({
           isSelected={isSelected}
           showLabels={showLabels}
           onGardenClick={onGardenClick}
-          mapType={effectiveMapType}
           isAvailable={isAvailable}
           hoveredGardenNumber={hoveredGardenNumber}
           onGardenHover={onGardenHover}
@@ -547,6 +487,8 @@ export default function GardenMap({
 
   const googleMap3DRef = useRef<HTMLDivElement | null>(null);
   const googleMapInstanceRef = useRef<any>(null);
+  // Garten, auf den das Luftbild zuletzt eingepasst wurde ("" = Übersicht)
+  const lastFitRef = useRef<string | null>(null);
 
   useEffect(() => {
     const map = googleMapInstanceRef.current;
@@ -564,7 +506,6 @@ export default function GardenMap({
       })
       .catch(() => {});
   }, [disable3D, cookiePreferences.googleMaps]);
-  const googleMapPolygonRef = useRef<any>(null);
   const mapWrapperRef = useRef<HTMLDivElement>(null);
 
   // Stelle sicher, dass die Karte die volle Höhe des Parents nutzt
@@ -584,20 +525,15 @@ export default function GardenMap({
   }, []);
 
   // Flaches Google-Luftbild (Luftbild mit ausgeschaltetem 3D). Die 3D-Ansicht rendert Garden3DView.
+  // Die Karte entsteht einmal je Container, weil jede neue Karte ein abgerechneter Kartenaufruf
+  // ist. Bei neuen Daten werden nur die Umrisse neu gezeichnet.
   useEffect(() => {
-    if (mapType !== "3d" || !googleMap3DRef.current) {
-      // Cleanup wenn nicht mehr im flachen Luftbild
-      if (googleMapPolygonRef.current) {
-        googleMapPolygonRef.current.setMap(null);
-        googleMapPolygonRef.current = null;
-      }
-      if (googleMapInstanceRef.current) {
-        googleMapInstanceRef.current = null;
-      }
+    const container = googleMap3DRef.current;
+    if (mapType !== "3d" || !container) {
+      googleMapInstanceRef.current = null;
       return;
     }
 
-    // Prüfe ob beide Zustimmungen gegeben sind
     if (!cookiePreferences.googleMaps || !cookiePreferences.openStreetMap) {
       return;
     }
@@ -607,198 +543,101 @@ export default function GardenMap({
       return;
     }
 
-    // Warte auf OSM-Daten bevor 3D initialisiert wird
-    // Warum?
-    // - Google Maps 3D benötigt Koordinaten für Bounds-Berechnung
-    // - Ohne Daten würde Karte auf Standard-Position zentrieren (schlechte UX)
-    // - Verhindert unnötige API-Calls wenn Daten noch nicht verfügbar sind
-    if (selectedGarden && !osmGeometry) {
-      // Warte auf osmGeometry für ausgewählten Garten
+    // Auf die Umrisse warten, sonst stünde die Karte an der Standardposition
+    if (selectedGarden ? !osmGeometry : allGardens.length === 0) {
       return;
     }
-
-    if (!selectedGarden && allGardens.length === 0 && cookiePreferences.openStreetMap) {
-      // Warte auf allGardens für Übersicht (nur wenn OSM-Zustimmung gegeben)
-      // Ohne Gärten kann keine sinnvolle Bounds-Berechnung erfolgen
-      return;
-    }
-
-    const initFlatSatelliteMap = () => {
-      if (!googleMap3DRef.current || !(window as any).google) {
-        return;
-      }
-
-      const google = (window as any).google;
-
-      // Berechne Bounds für alle Gärten oder nur den ausgewählten
-      const bounds = new google.maps.LatLngBounds();
-      let hasValidBounds = false;
-
-      if (selectedGarden && osmGeometry && osmGeometry.length > 0) {
-        // Verwende ausgewählten Garten mit osmGeometry
-        for (const point of osmGeometry) {
-          if (isValidCoordinate(point.lat, point.lon)) {
-            bounds.extend(new google.maps.LatLng(point.lat, point.lon));
-            hasValidBounds = true;
-          }
-        }
-      } else if (allGardens.length > 0) {
-        // Verwende alle Gärten für die Übersicht
-        for (const garden of allGardens) {
-          if (garden.geometry && garden.geometry.length > 0) {
-            for (const point of garden.geometry) {
-              if (isValidCoordinate(point.lat, point.lon)) {
-                bounds.extend(new google.maps.LatLng(point.lat, point.lon));
-                hasValidBounds = true;
-              }
-            }
-          }
-        }
-      }
-
-      // Fallback auf initiale Koordinaten wenn keine gültigen Bounds vorhanden
-      if (!hasValidBounds) {
-        bounds.extend(new google.maps.LatLng(INITIAL_MAP_CENTER[0], INITIAL_MAP_CENTER[1]));
-      }
-
-      // Erstelle flache Google-Satellitenkarte
-      const map = new google.maps.Map(googleMap3DRef.current, {
-        center: bounds.isEmpty()
-          ? { lat: INITIAL_MAP_CENTER[0], lng: INITIAL_MAP_CENTER[1] }
-          : bounds.getCenter(),
-        zoom: selectedGarden ? GOOGLE_MAPS_CONFIG.GARDEN_ZOOM : GOOGLE_MAPS_CONFIG.DEFAULT_ZOOM,
-        mapTypeId: google.maps.MapTypeId.SATELLITE,
-        // Neigung erst nach dem Laden setzen: direkt beim Erzeugen bleibt die Karte sonst grau
-        tilt: 0,
-        rotateControl: true,
-        heading: 0,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: true,
-        zoomControl: true,
-        zoomControlOptions: {
-          position: google.maps.ControlPosition.TOP_LEFT, // Gleiche Position wie OSM-Karte
-        },
-        // Begrenze Kartenansicht auf Region Osnabrück (Stadtlevel)
-        restriction: {
-          latLngBounds: new google.maps.LatLngBounds(
-            { lat: OSNABRUECK_BOUNDS.south, lng: OSNABRUECK_BOUNDS.west },
-            { lat: OSNABRUECK_BOUNDS.north, lng: OSNABRUECK_BOUNDS.east }
-          ),
-          strictBounds: true, // Verhindert Rauszoomen über die Grenzen hinaus
-        },
-        maxZoom: GOOGLE_MAPS_CONFIG.MAX_ZOOM,
-        minZoom: GOOGLE_MAPS_CONFIG.MIN_ZOOM,
-      });
-
-      googleMapInstanceRef.current = map;
-      google.maps.event.addListenerOnce(map, "tilesloaded", () => {
-        if (isObliqueRef.current) applyOblique(map, true);
-      });
-
-      // Zeige alle Gärten an
-      for (const garden of allGardens) {
-        if (garden.geometry && garden.geometry.length > 0) {
-          // Validiere alle Koordinaten bevor Polygon erstellt wird
-          // Warum?
-          // - Ungültige Koordinaten würden Google Maps API zum Absturz bringen
-          // - Filterung verhindert Fehler und verbessert Performance
-          const validPath = garden.geometry
-            .filter((point: { lat: number; lon: number }) =>
-              isValidCoordinate(point.lat, point.lon)
-            )
-            .map(
-              (point: { lat: number; lon: number }) => new google.maps.LatLng(point.lat, point.lon)
-            );
-
-          // Überspringe wenn keine gültigen Koordinaten vorhanden
-          // Polygon benötigt mindestens 3 Punkte (Dreieck)
-          if (validPath.length < 3) {
-            continue;
-          }
-
-          const isSelected = selectedGarden && garden.tags?.ref === selectedGarden.number;
-
-          // Erstelle Polygon für Visualisierung (nicht klickbar in Luftbildansicht)
-          // In Luftbildansicht (3D/Satellit) keine Klicks erlauben
-          // Polygone dienen nur zur Visualisierung, nicht zur Navigation
-          new google.maps.Polygon({
-            paths: validPath,
-            strokeColor: isSelected ? "#00FF00" : "#888888",
-            strokeOpacity: isSelected ? 1.0 : 0.5,
-            strokeWeight: isSelected ? 3 : 1,
-            fillColor: isSelected ? "#00FF00" : "#888888",
-            fillOpacity: 0, // Kein transparenter Hintergrund
-            map: map, // Polygon wird durch map-Property automatisch angezeigt
-          });
-        }
-      }
-
-      // Zeige ausgewählten Garten hervorgehoben
-      if (selectedGarden && osmGeometry && osmGeometry.length > 0) {
-        // Validiere alle Koordinaten bevor Polygon erstellt wird
-        const validSelectedPath = osmGeometry
-          .filter((point) => isValidCoordinate(point.lat, point.lon))
-          .map((point) => new google.maps.LatLng(point.lat, point.lon));
-
-        if (validSelectedPath.length >= 3) {
-          const selectedPolygon = new google.maps.Polygon({
-            paths: validSelectedPath,
-            strokeColor: "#00FF00",
-            strokeOpacity: 1.0,
-            strokeWeight: 3,
-            fillColor: "#00FF00",
-            fillOpacity: 0, // Kein transparenter Hintergrund
-            map: map,
-          });
-
-          googleMapPolygonRef.current = selectedPolygon;
-
-          // Zoome zum ausgewählten Garten - warte kurz damit die Karte gerendert ist
-          // Warum setTimeout?
-          // - Google Maps braucht Zeit für initiales Rendering
-          // - fitBounds() funktioniert erst nach vollständigem Laden der Karte
-          setTimeout(() => {
-            try {
-              const selectedBounds = new google.maps.LatLngBounds();
-              for (const p of validSelectedPath) {
-                selectedBounds.extend(p);
-              }
-              if (!selectedBounds.isEmpty()) {
-                map.fitBounds(selectedBounds);
-              }
-            } catch (error) {
-              console.error("Error fitting bounds for selected garden:", error);
-            }
-          }, 100);
-        }
-      } else if (hasValidBounds && !bounds.isEmpty()) {
-        // Warte kurz damit die Karte gerendert ist bevor bounds gesetzt werden
-        setTimeout(() => {
-          try {
-            map.fitBounds(bounds);
-          } catch (error) {
-            console.error("Error fitting bounds:", error);
-          }
-        }, 100);
-      }
-    };
 
     let cancelled = false;
+    const polygons: any[] = [];
+
     loadGoogleMaps()
-      .then(() => {
-        if (!cancelled) initFlatSatelliteMap();
+      .then((google) => {
+        if (cancelled) return;
+        const toPath = (geometry: Array<{ lat: number; lon: number }>) =>
+          geometry
+            .filter((point) => isValidCoordinate(point.lat, point.lon))
+            .map((point) => new google.maps.LatLng(point.lat, point.lon));
+
+        // Ausgewählter Garten oder alle Gärten für die Übersicht
+        const bounds = new google.maps.LatLngBounds();
+        const focus = selectedGarden
+          ? [toPath(osmGeometry ?? [])]
+          : allGardens.map((g) => toPath(g.geometry ?? []));
+        for (const path of focus) {
+          for (const point of path) bounds.extend(point);
+        }
+
+        let map = googleMapInstanceRef.current;
+        if (!map || map.getDiv() !== container) {
+          map = new google.maps.Map(container, {
+            center: bounds.isEmpty()
+              ? { lat: INITIAL_MAP_CENTER[0], lng: INITIAL_MAP_CENTER[1] }
+              : bounds.getCenter(),
+            zoom: selectedGarden ? GOOGLE_MAPS_CONFIG.GARDEN_ZOOM : GOOGLE_MAPS_CONFIG.DEFAULT_ZOOM,
+            mapTypeId: google.maps.MapTypeId.SATELLITE,
+            // Neigung erst nach dem Laden setzen: direkt beim Erzeugen bleibt die Karte sonst grau
+            tilt: 0,
+            rotateControl: true,
+            heading: 0,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: true,
+            zoomControl: true,
+            zoomControlOptions: {
+              position: google.maps.ControlPosition.TOP_LEFT, // Gleiche Position wie OSM-Karte
+            },
+            // Begrenze Kartenansicht auf Region Osnabrück (Stadtlevel)
+            restriction: {
+              latLngBounds: new google.maps.LatLngBounds(
+                { lat: OSNABRUECK_BOUNDS.south, lng: OSNABRUECK_BOUNDS.west },
+                { lat: OSNABRUECK_BOUNDS.north, lng: OSNABRUECK_BOUNDS.east }
+              ),
+              strictBounds: true, // Verhindert Rauszoomen über die Grenzen hinaus
+            },
+            maxZoom: GOOGLE_MAPS_CONFIG.MAX_ZOOM,
+            minZoom: GOOGLE_MAPS_CONFIG.MIN_ZOOM,
+          });
+          googleMapInstanceRef.current = map;
+          lastFitRef.current = null;
+          google.maps.event.addListenerOnce(map, "tilesloaded", () => {
+            if (isObliqueRef.current) applyOblique(map, true);
+          });
+        }
+
+        // Umrisse nur zur Ansicht, im Luftbild nicht klickbar. Polygone brauchen mindestens 3 Punkte.
+        for (const garden of allGardens) {
+          const path = toPath(garden.geometry ?? []);
+          if (path.length < 3) continue;
+          const isSelected = garden.tags.ref === selectedGarden?.number;
+          polygons.push(
+            new google.maps.Polygon({
+              paths: path,
+              strokeColor: isSelected ? "#00FF00" : "#888888",
+              strokeOpacity: isSelected ? 1.0 : 0.5,
+              strokeWeight: isSelected ? 3 : 1,
+              fillOpacity: 0,
+              map,
+            })
+          );
+        }
+
+        // Nur bei neuer Karte oder anderem Garten einpassen, nicht bei jeder Datenaktualisierung.
+        // Google Maps braucht nach dem Erzeugen einen Moment, bevor fitBounds greift.
+        const fitKey = selectedGarden?.number ?? "";
+        if (lastFitRef.current !== fitKey && !bounds.isEmpty()) {
+          lastFitRef.current = fitKey;
+          setTimeout(() => map.fitBounds(bounds), 100);
+        }
       })
       .catch((error) => {
         console.error(error);
       });
 
-    // Cleanup
     return () => {
       cancelled = true;
-      if (googleMapPolygonRef.current) {
-        googleMapPolygonRef.current.setMap(null);
-        googleMapPolygonRef.current = null;
+      for (const polygon of polygons) {
+        polygon.setMap(null);
       }
     };
   }, [
@@ -889,64 +728,23 @@ export default function GardenMap({
           zoom={INITIAL_MAP_ZOOM}
           style={{ height: "100%", width: "100%", minHeight: "350px", flex: "1 1 0%" }}
           scrollWheelZoom={true}
-          maxZoom={mapType === "osm" ? 19 : 22}
+          maxZoom={19}
           minZoom={13}
           maxBounds={osnabrueckLeafletBounds}
           maxBoundsViscosity={1.0}
-          key={`map-${mapType}`}
         >
-          {mapType === "osm" ? (
-            cookiePreferences.openStreetMap ? (
-              <TileLayer
-                key="osm"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                url="https://{s}.tile.openstreetmap.de/{z}/{x}/{y}.png"
-                maxZoom={19}
-              />
-            ) : (
-              <CookieConsentHint
-                service="OpenStreetMap"
-                feature="die Kartenansicht"
-                onOpenCookieConsent={onOpenCookieConsent}
-              />
-            )
+          {cookiePreferences.openStreetMap ? (
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.de/{z}/{x}/{y}.png"
+              maxZoom={19}
+            />
           ) : (
-            <>
-              {/* Google Maps Satellite - Höchste Qualität */}
-              {GOOGLE_MAPS_API_KEY ? (
-                <TileLayer
-                  key="satellite-google"
-                  attribution='&copy; <a href="https://www.google.com/maps">Google</a>'
-                  url={`https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}&key=${GOOGLE_MAPS_API_KEY}`}
-                  maxZoom={22}
-                  minZoom={0}
-                  tileSize={256}
-                  zoomOffset={0}
-                  maxNativeZoom={22}
-                  subdomains={["mt0", "mt1", "mt2", "mt3"]}
-                />
-              ) : (
-                <>
-                  {/* Fallback: Esri falls Google Maps API Key nicht gesetzt */}
-                  <TileLayer
-                    key="satellite-esri"
-                    attribution='&copy; <a href="https://www.esri.com/">Esri</a> &copy; <a href="https://www.maxar.com/">Maxar</a>'
-                    url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                    maxZoom={23}
-                    minZoom={10}
-                    tileSize={256}
-                    zoomOffset={0}
-                    maxNativeZoom={19}
-                  />
-                  {!GOOGLE_MAPS_API_KEY && (
-                    <div className="absolute top-12 right-2 z-1000 bg-yellow-50 border border-yellow-200 rounded-lg p-2 text-xs text-yellow-800 max-w-xs">
-                      ⚠ Google Maps API Key nicht gefunden. Bitte setzen Sie
-                      VITE_GOOGLE_MAPS_API_KEY in der .env Datei.
-                    </div>
-                  )}
-                </>
-              )}
-            </>
+            <CookieConsentHint
+              service="OpenStreetMap"
+              feature="die Kartenansicht"
+              onOpenCookieConsent={onOpenCookieConsent}
+            />
           )}
           {/* Controller für ausgewählten Garten */}
           {selectedGarden && <MapController garden={selectedGarden} osmGeometry={osmGeometry} />}
@@ -961,108 +759,6 @@ export default function GardenMap({
 
           {/* Zeige alle Gärten an, aber nur gefilterte als verfügbar markieren */}
           {gardenPolygons}
-
-          {/* Zeige ausgewählten Garten als Polygon wenn osmGeometry vorhanden ist (auch wenn nicht in allGardens) */}
-          {selectedGarden &&
-            osmGeometry &&
-            osmGeometry.length > 0 &&
-            (() => {
-              const gardenNumber = selectedGarden.number;
-              // Luftbilder: nur Kontur, damit das Bild sichtbar bleibt
-              const isSatellite = mapType !== "osm";
-              const isAvailable = availableGardens.some((g) => g.number === gardenNumber);
-              const isHovered = hoveredGardenNumber === gardenNumber;
-              return (
-                <Polygon
-                  positions={osmGeometryToLeafletCoords(osmGeometry)}
-                  pathOptions={{
-                    color: "#22c55e",
-                    fillColor: "#22c55e",
-                    fillOpacity: isSatellite ? 0 : 0.3,
-                    weight: isSatellite ? 3 : 2,
-                  }}
-                  eventHandlers={
-                    !isSatellite
-                      ? {
-                          click: () => onGardenClick(gardenNumber),
-                          mouseover: () => onGardenHover?.(gardenNumber),
-                          mouseout: () => onGardenHover?.(null),
-                        }
-                      : {}
-                  }
-                >
-                  {showLabels && (
-                    <Tooltip
-                      permanent
-                      direction="center"
-                      className={`garden-label-tooltip garden-label-clickable ${isAvailable ? "garden-label-available" : ""}`}
-                      opacity={1}
-                    >
-                      <span
-                        className={`font-semibold transition-all ${
-                          !isSatellite ? "cursor-pointer" : "cursor-default"
-                        } ${
-                          isAvailable
-                            ? isHovered
-                              ? "text-white bg-scholle-green-dark text-lg px-2 py-1 rounded-sm"
-                              : "text-white bg-scholle-green hover:bg-scholle-green-dark hover:text-lg px-2 py-1 rounded-sm"
-                            : "text-scholle-green-dark"
-                        }`}
-                        onClick={
-                          !isSatellite
-                            ? (e) => {
-                                e.stopPropagation();
-                                onGardenClick(gardenNumber);
-                              }
-                            : undefined
-                        }
-                        onMouseEnter={
-                          !isSatellite ? () => onGardenHover?.(gardenNumber) : undefined
-                        }
-                        onMouseLeave={!isSatellite ? () => onGardenHover?.(null) : undefined}
-                      >
-                        {gardenNumber}
-                      </span>
-                    </Tooltip>
-                  )}
-                </Polygon>
-              );
-            })()}
-
-          {/* Marker für ausgewählten Garten - nur wenn Labels NICHT sichtbar und in OSM-Karte */}
-          {selectedGarden &&
-            osmGeometry &&
-            osmGeometry.length > 0 &&
-            mapType === "osm" &&
-            !showLabels &&
-            (() => {
-              const gardenNumber = selectedGarden.number;
-              const isAvailable = availableGardens.some((g) => g.number === gardenNumber);
-              const isHovered = hoveredGardenNumber === gardenNumber;
-
-              // Berechne Zentrum der Geometrie
-              const center = calculateGeometryCenter(osmGeometry);
-              if (!center) return null;
-
-              // Nur grünen Marker anzeigen wenn verfügbar
-              if (isAvailable) {
-                return (
-                  <Marker
-                    key={`selected-${selectedGarden.id}`}
-                    position={[center.lat, center.lon]}
-                    icon={isHovered ? HighlightedIcon : GreenIcon}
-                    eventHandlers={{
-                      click: () => onGardenClick(gardenNumber),
-                      mouseover: () => onGardenHover?.(gardenNumber),
-                      mouseout: () => onGardenHover?.(null),
-                    }}
-                  >
-                    <Tooltip permanent={false}>Garten {gardenNumber}</Tooltip>
-                  </Marker>
-                );
-              }
-              return null;
-            })()}
 
           {/* Marker für gefilterte Gärten - nur wenn in OSM gefunden und Labels NICHT sichtbar */}
           {availableMarkers}

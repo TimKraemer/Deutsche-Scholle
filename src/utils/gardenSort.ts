@@ -9,6 +9,31 @@ export interface SortConfig {
   direction: SortDirection;
 }
 
+const SORT_OPTIONS: SortOption[] = ["number", "availableFrom", "size", "valuation"];
+
+/** Gespeicherte Sortierung (geteilt von Startseite und Detailseite), Standard: Nummer aufsteigend */
+export function loadSortConfig(): SortConfig {
+  try {
+    const field = localStorage.getItem("gardenSortBy") as SortOption;
+    const direction = localStorage.getItem("gardenSortDirection");
+    return {
+      field: SORT_OPTIONS.includes(field) ? field : "number",
+      direction: direction === "desc" ? "desc" : "asc",
+    };
+  } catch {
+    return { field: "number", direction: "asc" };
+  }
+}
+
+export function saveSortConfig(config: SortConfig): void {
+  try {
+    localStorage.setItem("gardenSortBy", config.field);
+    localStorage.setItem("gardenSortDirection", config.direction);
+  } catch {
+    // Ohne localStorage gilt die Sortierung nur für diesen Seitenaufruf
+  }
+}
+
 // Hilfsfunktion zum Parsen des "Frei ab" Datums
 const parseAvailableDate = (dateString: string): Date | null => {
   if (!dateString) return null;

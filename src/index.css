@@ -100,3 +100,77 @@
 .garden-label-tooltip .leaflet-tooltip-tip {
   display: none !important;
 }
+
+/* Bereichs-Slider der Filter: zwei Regler übereinander, nur die Griffe nehmen Klicks an */
+.range-slider {
+  position: relative;
+  height: 1.5rem;
+}
+
+.range-slider::before,
+.range-slider::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  transform: translateY(-50%);
+  border-radius: 2px;
+}
+
+.range-slider::before {
+  left: 0;
+  right: 0;
+  background: #e5e7eb;
+}
+
+.range-slider::after {
+  left: var(--low);
+  right: calc(100% - var(--high));
+  background: var(--color-scholle-green);
+}
+
+.range-slider input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  margin: 0;
+  background: none;
+  pointer-events: none;
+  appearance: none;
+}
+
+.range-slider input::-webkit-slider-thumb {
+  appearance: none;
+  pointer-events: auto;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 2px solid white;
+  border-radius: 9999px;
+  background: var(--color-scholle-green);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.15);
+  cursor: pointer;
+}
+
+.range-slider input::-moz-range-track {
+  background: transparent;
+}
+
+.range-slider input::-moz-range-thumb {
+  pointer-events: auto;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 2px solid white;
+  border-radius: 9999px;
+  background: var(--color-scholle-green);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.15);
+  cursor: pointer;
+}
+
+.range-slider input:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgb(107 143 45 / 0.3);
+}
+
+.range-slider input:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 4px rgb(107 143 45 / 0.3);
+}

@@ -8,7 +8,7 @@ Diese Anwendung bietet Mitgliedern und Interessenten des Kleingartenvereins eine
 
 - **Freie Gärten auf einer interaktiven Karte entdecken** – Visualisierung aller verfügbaren Gärten mit exakter Position und Umrissen
 - **Gärten filtern und sortieren** – Erweiterte Filteroptionen nach Preis, Größe und Verfügbarkeit mit flexibler Sortierung
-- **Gartendetails einsehen** – Informationen zu Größe, Parzelle, Verfügbarkeit, Wertermittlung und Ausstattung
+- **Gartendetails einsehen** – Informationen zu Größe, Parzelle, Verfügbarkeit und Wertermittlung
 - **3D-Satellitenansicht nutzen** – Realistische 3D-Ansicht der Gärten mit Google Maps Integration
 - **Gärten durchsuchen** – Schnelle Suche nach Gartennummer mit direkter Navigation
 - **Zwischen Gärten navigieren** – Vorheriger/Nächster Navigation auf der Detailseite mit konsistenter Sortierung
@@ -31,7 +31,6 @@ Das Design orientiert sich am Corporate Design des Vereins und bietet:
 - **Responsive Layout** – Funktioniert auf Desktop, Tablet und Smartphone
 - **Hover-Synchronisation** – Hover-Effekte zwischen Karte und Liste sind synchronisiert
 - **Intelligente Scrollbereiche** – Jeder Bereich scrollt unabhängig, ohne dass die gesamte Seite scrollen muss
-- **Minimalistische Icons** – Klare, verständliche Symbole für Ausstattung und Features
 - **Erweiterte Filter** – Visuell hervorgehobene Filter mit animiertem Auf-/Zuklappen
 - **Sortierbare Tabellen** – Intuitive Sortierung mit visuellen Indikatoren (Pfeile)
 
@@ -41,7 +40,7 @@ Die Anwendung nutzt einen ausgeklügelten Algorithmus, um automatisch die richti
 ### 🎛️ Erweiterte Filter- und Sortierfunktionen
 - **Preisfilter** – Min-Max Bereichsslider für Wertermittlung
 - **Größenfilter** – Min-Max Bereichsslider für Gartenfläche
-- **Verfügbarkeitsfilter** – Checkbox "Nur frei ab sofort"
+- **Verfügbarkeitsfilter** – Checkbox "Nur frei ab sofort" (zählt auch Gärten, deren Datum schon erreicht ist)
 - **Multi-Sortierung** – Sortierung nach Nummer, Verfügbarkeitsdatum, Größe oder Preis (auf-/absteigend)
 - **Persistente Einstellungen** – Filter und Sortierung werden im Browser gespeichert
 
@@ -71,7 +70,6 @@ Die Anwendung nutzt einen ausgeklügelten Algorithmus, um automatisch die richti
 ### Gartendetails
 - **Basisinformationen**: Nummer, Parzelle, Größe (Datenbank + OSM-berechnet)
 - **Verfügbarkeit**: "Frei ab" Datum oder "Sofort"
-- **Ausstattung**: Stromanschluss und Wasseranschluss (nur wenn bekannt, Bereich wird ausgeblendet wenn keine Daten)
 - **Werte**: Wertermittlung und Wertminderung (Wert wird auch bei 0 angezeigt)
 - **Navigation**: Vorheriger/Nächster Garten Buttons mit konsistenter Sortierung
 - **Filter-Indikator**: Zeigt an, wenn Filter aktiv sind beim Durchblättern
@@ -140,6 +138,15 @@ warten (die regelmäßig 500/504 liefern oder hängen). Ist Overpass beim Build 
 bleibt der vorhandene Snapshot erhalten. Ist der Stand älter als 12 Stunden, aktualisiert der
 Browser ihn einmal im Hintergrund und merkt sich das Ergebnis im localStorage.
 
+### Tests
+
+```bash
+bun test
+```
+
+Die Tests in `src/utils/gardenData.test.ts` prüfen das Einlesen der Vereinsliste, die Filter und
+die Wahl der Parzelle. Die Parzelle aus der Vereinsliste gilt vor der aus OSM erratenen.
+
 ### Liste der freien Gärten
 
 Die freien Gärten stammen von der Vereinsseite
@@ -161,6 +168,8 @@ src/
 │   ├── CookieConsent.tsx
 │   ├── CookieConsentContent.tsx
 │   ├── CookieConsentHint.tsx
+│   ├── Footer.tsx
+│   ├── Garden3DView.tsx
 │   ├── GardenChecklist.tsx
 │   ├── GardenDetails.tsx
 │   ├── GardenFilters.tsx

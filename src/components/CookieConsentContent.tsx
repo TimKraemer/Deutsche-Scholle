@@ -1,14 +1,9 @@
-import { useEffect, useState } from "react";
-
-interface CookiePreferences {
-  googleMaps: boolean | null;
-  openStreetMap: boolean | null;
-}
+import { useState } from "react";
+import type { CookiePreferences } from "../types/cookies";
+import { loadSavedConsent, saveCookiePreferences } from "../utils/cookies";
 
 interface CookieConsentContentProps {
   onConsentChange: (preferences: CookiePreferences) => void;
-  initialGoogleMaps?: boolean | null;
-  initialOpenStreetMap?: boolean | null;
   // Inline-Variante (z.B. im Kartenbereich): ohne eigene Höhenbegrenzung/Scroll,
   // damit der Inhalt natürlich fließt und die Seite scrollt (wichtig auf Mobil).
   embedded?: boolean;
@@ -16,82 +11,31 @@ interface CookieConsentContentProps {
 
 export default function CookieConsentContent({
   onConsentChange,
-  initialGoogleMaps = null,
-  initialOpenStreetMap = null,
   embedded = false,
 }: CookieConsentContentProps) {
-  const [googleMapsConsent, setGoogleMapsConsent] = useState<boolean | null>(initialGoogleMaps);
+  // Vorbelegt mit der gespeicherten Entscheidung, null = noch nicht entschieden
+  const [saved] = useState(loadSavedConsent);
+  const [googleMapsConsent, setGoogleMapsConsent] = useState<boolean | null>(saved.googleMaps);
   const [openStreetMapConsent, setOpenStreetMapConsent] = useState<boolean | null>(
-    initialOpenStreetMap
+    saved.openStreetMap
   );
 
-  useEffect(() => {
-    // Lade gespeicherte Cookie-Werte wenn initial nicht gesetzt
-    if (initialGoogleMaps === null || initialOpenStreetMap === null) {
-      const getCookie = (name: string): string | null => {
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) {
-          return parts.pop()?.split(";").shift() || null;
-        }
-        return null;
-      };
-
-      const savedGoogleMaps = getCookie("cookie_consent_google_maps");
-      const savedOSM = getCookie("cookie_consent_openstreetmap");
-
-      if (savedGoogleMaps !== null) {
-        setGoogleMapsConsent(savedGoogleMaps === "true");
-      }
-      if (savedOSM !== null) {
-        setOpenStreetMapConsent(savedOSM === "true");
-      }
-    }
-  }, []);
-
-  const setCookie = (name: string, value: string, days: number = 365) => {
-    const expires = new Date();
-    expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
-    document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/;SameSite=Lax`;
+  const decide = (preferences: CookiePreferences) => {
+    setGoogleMapsConsent(preferences.googleMaps);
+    setOpenStreetMapConsent(preferences.openStreetMap);
+    saveCookiePreferences(preferences);
+    onConsentChange(preferences);
   };
 
   const handleSave = () => {
     if (googleMapsConsent !== null && openStreetMapConsent !== null) {
-      // Speichere Zustimmungen in Cookies
-      setCookie("cookie_consent_google_maps", googleMapsConsent.toString());
-      setCookie("cookie_consent_openstreetmap", openStreetMapConsent.toString());
-
-      // Informiere Parent-Komponente
-      onConsentChange({
-        googleMaps: googleMapsConsent,
-        openStreetMap: openStreetMapConsent,
-      });
+      decide({ googleMaps: googleMapsConsent, openStreetMap: openStreetMapConsent });
     }
   };
 
-  const handleAcceptAll = () => {
-    setGoogleMapsConsent(true);
-    setOpenStreetMapConsent(true);
-    setCookie("cookie_consent_google_maps", "true");
-    setCookie("cookie_consent_openstreetmap", "true");
+  const handleAcceptAll = () => decide({ googleMaps: true, openStreetMap: true });
 
-    onConsentChange({
-      googleMaps: true,
-      openStreetMap: true,
-    });
-  };
-
-  const handleRejectAll = () => {
-    setGoogleMapsConsent(false);
-    setOpenStreetMapConsent(false);
-    setCookie("cookie_consent_google_maps", "false");
-    setCookie("cookie_consent_openstreetmap", "false");
-
-    onConsentChange({
-      googleMaps: false,
-      openStreetMap: false,
-    });
-  };
+  const handleRejectAll = () => decide({ googleMaps: false, openStreetMap: false });
 
   return (
     <div
@@ -121,8 +65,10 @@ export default function CookieConsentContent({
                   OpenStreetMap (Kartenansicht)
                 </h3>
                 <p className="text-sm text-scholle-text-light mb-2">
-                  Ermöglicht die Anzeige von Straßenkarten und Gartenumrissen. Daten werden an
-                  OpenStreetMap-Server übertragen.
+                  Ermöglicht die Anzeige von Straßenkarten und Gartenumrissen. Daten werden an die
+                  Kartenserver von OpenStreetMap Deutschland (tile.openstreetmap.de) übertragen. Zum
+                  Aktualisieren der Gartenumrisse fragt Ihr Browser gelegentlich die Overpass-Server
+                  overpass-api.de und overpass.private.coffee ab.
                 </p>
               </div>
               <div className="ml-4">

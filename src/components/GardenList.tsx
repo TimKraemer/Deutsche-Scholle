@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Garden } from "../types/garden";
 import { ON_REQUEST } from "../types/garden";
 import {
@@ -9,12 +9,21 @@ import {
 } from "../utils/formatting";
 import {
   filterAvailableGardens,
+  loadSortConfig,
   type SortConfig,
   type SortDirection,
   type SortOption,
+  saveSortConfig,
   sortGardens,
 } from "../utils/gardenSort";
 import GardenFilters from "./GardenFilters";
+
+const SORT_BUTTONS: { field: SortOption; label: string; title: string }[] = [
+  { field: "number", label: "Nr.", title: "Nach Gartennummer" },
+  { field: "availableFrom", label: "Frei ab", title: "Nach Verfügbarkeitsdatum" },
+  { field: "size", label: "Größe", title: "Nach Größe" },
+  { field: "valuation", label: "Preis", title: "Nach Preis" },
+];
 
 interface GardenListProps {
   gardens: Garden[];
@@ -37,30 +46,16 @@ export default function GardenList({
   onGardenHover,
   onFilteredGardensChange,
 }: GardenListProps) {
-  // Lade Sortierung aus localStorage oder verwende Standard (standardmäßig nach Nummer)
-  const [sortConfig, setSortConfig] = useState<SortConfig>(() => {
-    const savedField = localStorage.getItem("gardenSortBy");
-    const savedDirection = localStorage.getItem("gardenSortDirection") as SortDirection;
-    const validOptions: SortOption[] = ["number", "availableFrom", "size", "valuation"];
-    // Standardmäßig nach Nummer sortieren wenn keine gültige Einstellung gespeichert ist
-    const field = validOptions.includes(savedField as SortOption)
-      ? (savedField as SortOption)
-      : "number";
-    const direction =
-      savedDirection === "asc" || savedDirection === "desc" ? savedDirection : "asc";
-    return { field, direction };
-  });
+  const [sortConfig, setSortConfig] = useState<SortConfig>(loadSortConfig);
 
-  // Speichere Sortierung in localStorage wenn sie geändert wird
-  const handleSortChange = (newField: SortOption) => {
+  // Gleiches Feld erneut angeklickt: Richtung wechseln
+  const handleSortChange = (field: SortOption) => {
     setSortConfig((prev) => {
-      // Wenn dasselbe Feld angeklickt wird, wechsle die Richtung
-      const newDirection: SortDirection =
-        prev.field === newField && prev.direction === "asc" ? "desc" : "asc";
-      const newConfig = { field: newField, direction: newDirection };
-      localStorage.setItem("gardenSortBy", newField);
-      localStorage.setItem("gardenSortDirection", newDirection);
-      return newConfig;
+      const direction: SortDirection =
+        prev.field === field && prev.direction === "asc" ? "desc" : "asc";
+      const config = { field, direction };
+      saveSortConfig(config);
+      return config;
     });
   };
 
@@ -71,24 +66,10 @@ export default function GardenList({
   const [filteredGardens, setFilteredGardens] = useState<Garden[]>(availableGardens);
   const [hasActiveFilters, setHasActiveFilters] = useState(false);
 
-  // Aktualisiere gefilterte Gärten wenn sich verfügbare Gärten ändern
-  useEffect(() => {
-    setFilteredGardens(availableGardens);
-    setHasActiveFilters(false);
-  }, [availableGardens]);
-
   // Informiere Parent über gefilterte Gärten
   useEffect(() => {
     onFilteredGardensChange?.(filteredGardens);
   }, [filteredGardens]);
-
-  const handleFilterChange = useCallback((filtered: Garden[]) => {
-    setFilteredGardens(filtered);
-  }, []);
-
-  const handleFilterActiveChange = useCallback((isActive: boolean) => {
-    setHasActiveFilters(isActive);
-  }, []);
 
   // Sortiere nach ausgewählter Option und Richtung
   const sortedGardens = useMemo(() => {
@@ -116,126 +97,34 @@ export default function GardenList({
             )}
           </div>
           <div className="flex gap-2 flex-wrap">
-            <button
-              onClick={() => handleSortChange("number")}
-              className={`px-2 py-1 text-xs font-medium rounded transition-colors flex items-center gap-1 ${
-                sortConfig.field === "number"
-                  ? "bg-white text-scholle-green"
-                  : "bg-white/20 text-white hover:bg-white/30"
-              }`}
-              title={`Nach Gartennummer sortieren (${sortConfig.field === "number" ? (sortConfig.direction === "asc" ? "aufsteigend" : "absteigend") : "aufsteigend"})`}
-            >
-              <span>Nr.</span>
-              {sortConfig.field === "number" && (
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  {sortConfig.direction === "asc" ? (
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 15l7-7 7 7"
-                    />
-                  ) : (
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 9l-7 7-7-7"
-                    />
+            {SORT_BUTTONS.map(({ field, label, title }) => {
+              const isActive = sortConfig.field === field;
+              const direction = isActive ? sortConfig.direction : "asc";
+              return (
+                <button
+                  key={field}
+                  onClick={() => handleSortChange(field)}
+                  className={`px-2 py-1 text-xs font-medium rounded transition-colors flex items-center gap-1 ${
+                    isActive
+                      ? "bg-white text-scholle-green"
+                      : "bg-white/20 text-white hover:bg-white/30"
+                  }`}
+                  title={`${title} sortieren (${direction === "asc" ? "aufsteigend" : "absteigend"})`}
+                >
+                  <span>{label}</span>
+                  {isActive && (
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d={direction === "asc" ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"}
+                      />
+                    </svg>
                   )}
-                </svg>
-              )}
-            </button>
-            <button
-              onClick={() => handleSortChange("availableFrom")}
-              className={`px-2 py-1 text-xs font-medium rounded transition-colors flex items-center gap-1 ${
-                sortConfig.field === "availableFrom"
-                  ? "bg-white text-scholle-green"
-                  : "bg-white/20 text-white hover:bg-white/30"
-              }`}
-              title={`Nach Verfügbarkeitsdatum sortieren (${sortConfig.field === "availableFrom" ? (sortConfig.direction === "asc" ? "aufsteigend" : "absteigend") : "aufsteigend"})`}
-            >
-              <span>Frei ab</span>
-              {sortConfig.field === "availableFrom" && (
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  {sortConfig.direction === "asc" ? (
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 15l7-7 7 7"
-                    />
-                  ) : (
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 9l-7 7-7-7"
-                    />
-                  )}
-                </svg>
-              )}
-            </button>
-            <button
-              onClick={() => handleSortChange("size")}
-              className={`px-2 py-1 text-xs font-medium rounded transition-colors flex items-center gap-1 ${
-                sortConfig.field === "size"
-                  ? "bg-white text-scholle-green"
-                  : "bg-white/20 text-white hover:bg-white/30"
-              }`}
-              title={`Nach Größe sortieren (${sortConfig.field === "size" ? (sortConfig.direction === "asc" ? "aufsteigend" : "absteigend") : "aufsteigend"})`}
-            >
-              <span>Größe</span>
-              {sortConfig.field === "size" && (
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  {sortConfig.direction === "asc" ? (
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 15l7-7 7 7"
-                    />
-                  ) : (
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 9l-7 7-7-7"
-                    />
-                  )}
-                </svg>
-              )}
-            </button>
-            <button
-              onClick={() => handleSortChange("valuation")}
-              className={`px-2 py-1 text-xs font-medium rounded transition-colors flex items-center gap-1 ${
-                sortConfig.field === "valuation"
-                  ? "bg-white text-scholle-green"
-                  : "bg-white/20 text-white hover:bg-white/30"
-              }`}
-              title={`Nach Preis sortieren (${sortConfig.field === "valuation" ? (sortConfig.direction === "asc" ? "aufsteigend" : "absteigend") : "aufsteigend"})`}
-            >
-              <span>Preis</span>
-              {sortConfig.field === "valuation" && (
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  {sortConfig.direction === "asc" ? (
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 15l7-7 7 7"
-                    />
-                  ) : (
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 9l-7 7-7-7"
-                    />
-                  )}
-                </svg>
-              )}
-            </button>
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -244,8 +133,8 @@ export default function GardenList({
       {!isLoading && (
         <GardenFilters
           gardens={availableGardens}
-          onFilterChange={handleFilterChange}
-          onFilterActiveChange={handleFilterActiveChange}
+          onFilterChange={setFilteredGardens}
+          onFilterActiveChange={setHasActiveFilters}
         />
       )}
       <div className="flex-1 min-h-0 overflow-y-auto">
@@ -293,36 +182,6 @@ export default function GardenList({
                         <span className="text-lg font-semibold text-scholle-text">
                           Garten {garden.number}
                         </span>
-                        {garden.hasElectricity === true && (
-                          <svg
-                            className="w-4 h-4 text-scholle-text-light"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M13 10V3L4 14h7v7l9-11h-7z"
-                            />
-                          </svg>
-                        )}
-                        {garden.waterConnection && garden.waterConnection !== "kein" && (
-                          <svg
-                            className="w-4 h-4 text-scholle-text-light"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.548M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
-                            />
-                          </svg>
-                        )}
                       </div>
                       <div className="text-sm text-scholle-text-light space-y-0.5">
                         <div className="flex items-center gap-2">

@@ -1,25 +1,21 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { CookieConsentRef } from "../components/CookieConsent";
 import CookieConsent from "../components/CookieConsent";
+import Footer from "../components/Footer";
 import GardenDetails from "../components/GardenDetails";
 import { useCookiePreferences } from "../hooks/useCookiePreferences";
 import { useFreeGardens } from "../hooks/useFreeGardens";
 import { useGardenData } from "../hooks/useGardenData";
 import type { Garden } from "../types/garden";
-import { gardenValueToNumber } from "../utils/formatting";
 import { findGardenByNumber } from "../utils/freeGardens";
 import {
   applyGardenFilters,
+  calculateRanges,
   hasActiveFilters,
   loadFiltersFromStorage,
 } from "../utils/gardenFilters";
-import {
-  filterAvailableGardens,
-  type SortDirection,
-  type SortOption,
-  sortGardens,
-} from "../utils/gardenSort";
+import { filterAvailableGardens, loadSortConfig, sortGardens } from "../utils/gardenSort";
 import { findOsmGarden, osmWayToGarden } from "../utils/osm";
 
 // Karte (Leaflet) lazy laden: schwerste Abhängigkeit, getrennter Chunk
@@ -35,7 +31,11 @@ export default function GardenPage() {
     isLoading: osmLoading,
     hasError: osmError,
   } = useGardenData(cookiePreferences.openStreetMap);
-  const { gardens: freeGardens, isLoading: freeGardensLoading } = useFreeGardens();
+  const {
+    gardens: freeGardens,
+    isLoading: freeGardensLoading,
+    hasError: freeGardensError,
+  } = useFreeGardens();
 
   // Daten aus der Vereinsliste (/freie-gaerten.json), OSM-Daten (Umriss, Parzelle) kommen aus
   // dem Snapshot dazu. Alles wird synchron abgeleitet, es gibt keine eigene Abfrage pro Garten.
@@ -62,7 +62,10 @@ export default function GardenPage() {
 
   let error: string | null = null;
   if (!listGarden) {
-    if (!cookiePreferences.openStreetMap) {
+    if (freeGardensError) {
+      error =
+        "Die Liste der freien Gärten konnte nicht geladen werden. Ob dieser Garten frei ist, lässt sich gerade nicht sagen.";
+    } else if (!cookiePreferences.openStreetMap) {
       error = `Garten mit Nummer "${gardenNumber}" nicht gefunden. Bitte aktivieren Sie OpenStreetMap in den Cookie-Einstellungen, um auch Gärten zu finden, die nur in OSM vorhanden sind.`;
     } else if (osmError) {
       error = "Fehler beim Laden der Kartendaten. Bitte versuchen Sie es erneut.";
@@ -72,113 +75,25 @@ export default function GardenPage() {
       error = "Garten gefunden, aber Geometrie konnte nicht verarbeitet werden.";
     }
   }
-  // Lade Sortierung aus localStorage (synchronisiert mit Startseite)
-  // Standardmäßig nach Nummer sortieren wenn keine gültige Einstellung gespeichert ist
-  const [sortBy] = useState<SortOption>(() => {
-    const saved = localStorage.getItem("gardenSortBy");
-    const validOptions: SortOption[] = ["number", "availableFrom", "size", "valuation"];
-    return validOptions.includes(saved as SortOption) ? (saved as SortOption) : "number";
-  });
-
-  const [sortDirection] = useState<SortDirection>(() => {
-    const saved = localStorage.getItem("gardenSortDirection");
-    return saved === "asc" || saved === "desc" ? saved : "asc";
-  });
+  // Sortierung wie auf der Startseite, damit "Vorheriger/Nächster" der Liste folgt
+  const [sortConfig] = useState(loadSortConfig);
   const cookieConsentRef = useRef<CookieConsentRef>(null);
 
-  // Berechne Liste der freien Gärten mit Filterung und Sortierung (wie auf Startseite)
-  // WICHTIG: Filter werden berücksichtigt - beim Durchblättern werden nur gefilterte Gärten angezeigt
-  const { availableGardens, ranges, activeFilters } = useMemo(() => {
-    // Schritt 1: Filtere verfügbare Gärten (availableFrom gesetzt)
+  // Filter und Sortierung wie auf der Startseite: beim Durchblättern erscheinen nur die
+  // Gärten, die den aktiven Filtern entsprechen
+  const { availableGardens, filtersActive } = useMemo(() => {
     const available = filterAvailableGardens(freeGardens);
-
-    if (available.length === 0) {
-      // Fallback wenn keine verfügbaren Gärten
-      const defaultRanges = {
-        minPrice: 0,
-        maxPrice: 1200,
-        minSize: 350,
-        maxSize: 450,
-        defaultMinPrice: 0,
-        defaultMaxPrice: 1200,
-        defaultMinSize: 350,
-        defaultMaxSize: 450,
-      };
-      const filters = loadFiltersFromStorage({
-        minPrice: defaultRanges.defaultMinPrice,
-        maxPrice: defaultRanges.defaultMaxPrice,
-        minSize: defaultRanges.defaultMinSize,
-        maxSize: defaultRanges.defaultMaxSize,
-      });
-      return {
-        availableGardens: [],
-        ranges: defaultRanges,
-        activeFilters: filters,
-      };
-    }
-
-    // Schritt 2: Berechne echte Min/Max-Werte aus der Datenbank
-    const prices = available.map((g) => gardenValueToNumber(g.valuation)).filter((p) => p >= 0);
-    const sizes = available.map((g) => g.size).filter((s) => s > 0);
-
-    const realMinPrice = Math.min(...prices, 0);
-    const realMaxPrice = Math.max(...prices, 0);
-    const realMinSize = Math.min(...sizes);
-    const realMaxSize = Math.max(...sizes);
-
-    // Schritt 3: Berechne gerundete Werte für Initialisierung
-    // WICHTIG: Gerundete Werte dürfen nicht über die echten Maximalwerte hinausgehen
-    // und nicht unter die echten Minimalwerte fallen
-    const defaultMinPrice = Math.max(Math.floor(realMinPrice / 50) * 50, realMinPrice); // Begrenze auf echten Minimalwert
-    const defaultMaxPrice = Math.min(Math.ceil(realMaxPrice / 50) * 50, realMaxPrice); // Begrenze auf echten Maximalwert
-    const defaultMinSize = Math.max(Math.floor(realMinSize / 10) * 10, realMinSize); // Begrenze auf echten Minimalwert
-    const defaultMaxSize = Math.min(Math.ceil(realMaxSize / 10) * 10, realMaxSize); // Begrenze auf echten Maximalwert
-
-    const calculatedRanges = {
-      // Echte Min/Max-Werte für Slider-Grenzen (exakt aus der Datenbank)
-      minPrice: Math.max(0, realMinPrice),
-      maxPrice: realMaxPrice, // Echter Maximalwert aus der Datenbank
-      minSize: realMinSize, // Echter Minimalwert aus der Datenbank
-      maxSize: realMaxSize, // Echter Maximalwert aus der Datenbank
-      // Gerundete Werte für Initialisierung (auf 50€/10m² Schritte, aber innerhalb der echten Min/Max-Werte)
-      defaultMinPrice: Math.max(0, defaultMinPrice), // Bereits auf echten Minimalwert begrenzt
-      defaultMaxPrice: defaultMaxPrice, // Bereits auf echten Maximalwert begrenzt
-      defaultMinSize: defaultMinSize, // Bereits auf echten Minimalwert begrenzt
-      defaultMaxSize: defaultMaxSize, // Bereits auf echten Maximalwert begrenzt
-    };
-
-    // Schritt 4: Lade aktive Filter aus localStorage (synchronisiert mit Startseite)
-    const filters = loadFiltersFromStorage({
-      minPrice: calculatedRanges.defaultMinPrice,
-      maxPrice: calculatedRanges.defaultMaxPrice,
-      minSize: calculatedRanges.defaultMinSize,
-      maxSize: calculatedRanges.defaultMaxSize,
-    });
-
-    // Schritt 5: Wende Filter an (nur gefilterte Gärten werden beim Durchblättern berücksichtigt)
-    const filtered = applyGardenFilters(available, filters);
-
-    // Schritt 6: Sortiere nach ausgewählter Option und Richtung
-    const sorted = sortGardens(filtered, sortBy, sortDirection);
-
+    const ranges = calculateRanges(available);
+    const filters = loadFiltersFromStorage(ranges);
     return {
-      availableGardens: sorted,
-      ranges: calculatedRanges,
-      activeFilters: filters,
+      availableGardens: sortGardens(
+        applyGardenFilters(available, filters),
+        sortConfig.field,
+        sortConfig.direction
+      ),
+      filtersActive: hasActiveFilters(filters, ranges),
     };
-  }, [freeGardens, sortBy, sortDirection]);
-
-  // Prüfe ob Filter aktiv sind (vergleiche mit gerundeten Standard-Werten)
-  const filtersActive = useMemo(
-    () =>
-      hasActiveFilters(activeFilters, {
-        minPrice: ranges.defaultMinPrice,
-        maxPrice: ranges.defaultMaxPrice,
-        minSize: ranges.defaultMinSize,
-        maxSize: ranges.defaultMaxSize,
-      }),
-    [activeFilters, ranges]
-  );
+  }, [freeGardens, sortConfig]);
 
   // Finde aktuellen Index in der gefilterten und sortierten Liste
   const currentIndex = useMemo(() => {
@@ -193,12 +108,6 @@ export default function GardenPage() {
     currentIndex >= 0 && currentIndex < availableGardens.length - 1
       ? availableGardens[currentIndex + 1]
       : null;
-
-  useEffect(() => {
-    if (!gardenNumber) {
-      navigate("/");
-    }
-  }, [gardenNumber, navigate]);
 
   const handleGardenClick = (number: string) => {
     navigate(`/${number}`);
@@ -387,41 +296,16 @@ export default function GardenPage() {
 
               <GardenDetails
                 garden={selectedGarden}
-                osmGeometry={osmGeometry}
                 gardenNumber={gardenNumber}
                 osmParcel={osmParcel}
                 osmSize={osmSize}
+                listUnavailable={freeGardensError}
               />
             </div>
           </div>
         </div>
 
-        {/* Footer mit Hinweis zu Fehlern */}
-        <div className="shrink-0 border-t border-scholle-border bg-scholle-bg-light px-4 py-2">
-          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-scholle-text-light text-center">
-            <span>
-              Fehler in der Karte? Bitte melden Sie diese an{" "}
-              <a
-                href="mailto:scholle-map@tk22.de"
-                className="text-scholle-blue hover:text-scholle-blue-dark underline"
-              >
-                scholle-map@tk22.de
-              </a>{" "}
-              oder direkt beim Verein.
-            </span>
-            <a
-              href="https://github.com/TimKraemer/Deutsche-Scholle"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-scholle-blue hover:text-scholle-blue-dark"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true" className="w-4 h-4" fill="currentColor">
-                <path d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.27-.01-1-.02-1.96-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.4-5.25 5.68.41.36.78 1.06.78 2.14 0 1.55-.01 2.8-.01 3.18 0 .31.21.68.8.56A10.52 10.52 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5z" />
-              </svg>
-              Quellcode auf GitHub
-            </a>
-          </div>
-        </div>
+        <Footer />
       </div>
     </>
   );

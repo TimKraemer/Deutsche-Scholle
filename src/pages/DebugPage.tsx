@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { CookiePreferences } from "../types/cookies";
-import { CacheKeys, getFromCache, setCache } from "../utils/cache";
 import { loadCookiePreferences } from "../utils/cookies";
 import { getFreeGardens } from "../utils/freeGardens";
 import { getGardenData, osmWayToGarden, refreshGardenData } from "../utils/osm";
@@ -43,17 +41,13 @@ interface MissingOsmGarden {
 const GARDEN_NUMBER_MIN = 1;
 const GARDEN_NUMBER_MAX = 1058;
 
-// Im Cache gespeicherte Auswertung der Debug-Seite.
-// Wird einmal berechnet und nur auf Knopfdruck aktualisiert.
+// Auswertung der Debug-Seite. Dauert Millisekunden, wird bei jedem Aufruf neu berechnet.
 interface DebugResults {
   comparisons: GardenSizeComparison[];
   duplicates: DuplicateOsmGarden[];
   missingInOsm: MissingOsmGarden[];
-  generatedAt: number;
+  generatedAt: number | null; // Stand der OSM-Daten
 }
-
-// 7 Tage TTL: Auswertung ist aufwändig und ändert sich selten.
-const DEBUG_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
 
 export default function DebugPage() {
   const navigate = useNavigate();
@@ -65,17 +59,9 @@ export default function DebugPage() {
   const [generatedAt, setGeneratedAt] = useState<number | null>(null);
   const [sortColumn, setSortColumn] = useState<SortColumn>("number");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
-  const [cookiePreferences, setCookiePreferences] = useState<CookiePreferences>({
-    googleMaps: false,
-    openStreetMap: false,
-  });
+  const [cookiePreferences] = useState(loadCookiePreferences);
 
-  useEffect(() => {
-    const preferences = loadCookiePreferences();
-    setCookiePreferences(preferences);
-  }, []);
-
-  // Wendet ein (gecachtes oder neu berechnetes) Ergebnis auf den State an.
+  // Wendet ein neu berechnetes Ergebnis auf den State an.
   const applyResults = useCallback((results: DebugResults) => {
     setComparisons(results.comparisons);
     setDuplicates(results.duplicates);
@@ -93,9 +79,11 @@ export default function DebugPage() {
     });
 
     let allOsmGardens: any[] = [];
+    let osmGeneratedAt: number | null = null;
     try {
       const data = forceRefresh ? await refreshGardenData() : await getGardenData();
       allOsmGardens = data.gardens;
+      osmGeneratedAt = data.generatedAt;
     } catch (error) {
       console.error("Error loading all gardens:", error);
     }
@@ -205,20 +193,18 @@ export default function DebugPage() {
       comparisons: results,
       duplicates: duplicateGardens,
       missingInOsm: missingGardens,
-      generatedAt: Date.now(),
+      generatedAt: osmGeneratedAt,
     };
   }, []);
 
-  // Erzwingt eine Neuberechnung (Button "Aktualisieren") und schreibt in den Cache.
+  // Button "Aktualisieren": frische Daten von Overpass statt aus dem Snapshot
   const refresh = useCallback(async () => {
     if (!cookiePreferences.openStreetMap) {
       return;
     }
     setIsRefreshing(true);
     try {
-      const results = await computeResults(true);
-      setCache(CacheKeys.DEBUG_RESULTS, results, DEBUG_CACHE_TTL);
-      applyResults(results);
+      applyResults(await computeResults(true));
     } catch (error) {
       console.error("Error refreshing debug results:", error);
     } finally {
@@ -226,29 +212,16 @@ export default function DebugPage() {
     }
   }, [cookiePreferences.openStreetMap, computeResults, applyResults]);
 
-  // Initiales Laden: zeige gecachtes Ergebnis sofort, berechne nur falls kein Cache.
   useEffect(() => {
     if (!cookiePreferences.openStreetMap) {
       setIsLoading(false);
       return;
     }
 
-    const cached = getFromCache<DebugResults>(CacheKeys.DEBUG_RESULTS);
-    if (cached) {
-      applyResults(cached);
-      setIsLoading(false);
-      return;
-    }
-
     let cancelled = false;
-    setIsLoading(true);
     computeResults(false)
       .then((results) => {
-        if (cancelled) {
-          return;
-        }
-        setCache(CacheKeys.DEBUG_RESULTS, results, DEBUG_CACHE_TTL);
-        applyResults(results);
+        if (!cancelled) applyResults(results);
       })
       .catch((error) => {
         console.error("Error loading debug results:", error);
@@ -372,7 +345,7 @@ export default function DebugPage() {
             </button>
             <span className="text-xs text-scholle-text-light">
               {generatedAt
-                ? `Stand: ${new Date(generatedAt).toLocaleString("de-DE")} (aus Cache)`
+                ? `OSM-Stand: ${new Date(generatedAt).toLocaleString("de-DE")}`
                 : "Noch keine Daten geladen"}
             </span>
           </div>
