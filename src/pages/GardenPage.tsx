@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { CookieConsentRef } from "../components/CookieConsent";
 import CookieConsent from "../components/CookieConsent";
@@ -9,6 +9,7 @@ import { useFreeGardens } from "../hooks/useFreeGardens";
 import { useGardenData } from "../hooks/useGardenData";
 import type { Garden } from "../types/garden";
 import { findGardenByNumber } from "../utils/freeGardens";
+import { latestKnownGardens, loadFreeGardensHistory } from "../utils/freeGardensHistory";
 import {
   applyGardenFilters,
   calculateRanges,
@@ -43,16 +44,43 @@ export default function GardenPage() {
     () => (gardenNumber ? (findGardenByNumber(freeGardens, gardenNumber) ?? null) : null),
     [freeGardens, gardenNumber]
   );
+
+  // Nicht (mehr) freier Garten: Parzelle und Größe aus dem Verlauf der Vereinsliste, falls er
+  // früher einmal frei war. undefined = wird noch gesucht, null = nie auf der Liste.
+  const [pastGarden, setPastGarden] = useState<Garden | null | undefined>(undefined);
+  useEffect(() => {
+    setPastGarden(undefined);
+    if (listGarden || freeGardensLoading || !gardenNumber) return;
+    let cancelled = false;
+    loadFreeGardensHistory()
+      .then((snapshots) => {
+        const known = latestKnownGardens(snapshots).find((k) => k.garden.number === gardenNumber);
+        // Wert und "frei ab" gelten nicht mehr, der Garten ist vergeben
+        if (!cancelled) {
+          setPastGarden(
+            known ? { ...known.garden, availableFrom: "", valuation: 0, valueReduction: 0 } : null
+          );
+        }
+      })
+      .catch((error) => {
+        console.error("Error loading free gardens history:", error);
+        if (!cancelled) setPastGarden(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [gardenNumber, listGarden, freeGardensLoading]);
+  const clubGarden = listGarden ?? pastGarden ?? null;
   const osmWay = useMemo(
     () => (gardenData && gardenNumber ? findOsmGarden(gardenData, gardenNumber) : null),
     [gardenData, gardenNumber]
   );
   const osmParcel = (osmWay && gardenData?.parcels[osmWay.id]) || null;
   const osmGarden = useMemo(
-    () => (osmWay ? osmWayToGarden(osmWay, listGarden ?? undefined, osmParcel) : null),
-    [osmWay, listGarden, osmParcel]
+    () => (osmWay ? osmWayToGarden(osmWay, clubGarden ?? undefined, osmParcel) : null),
+    [osmWay, clubGarden, osmParcel]
   );
-  const selectedGarden: Garden | null = osmGarden ?? listGarden;
+  const selectedGarden: Garden | null = osmGarden ?? clubGarden;
   const hasOsmData = osmGarden !== null;
   const osmGeometry = hasOsmData ? osmWay?.geometry : undefined;
   const osmSize = osmGarden?.osmSize;
@@ -65,11 +93,11 @@ export default function GardenPage() {
     if (freeGardensError) {
       error =
         "Die Liste der freien Gärten konnte nicht geladen werden. Ob dieser Garten frei ist, lässt sich gerade nicht sagen.";
-    } else if (!cookiePreferences.openStreetMap) {
+    } else if (!cookiePreferences.openStreetMap && pastGarden === null) {
       error = `Garten mit Nummer "${gardenNumber}" nicht gefunden. Bitte aktivieren Sie OpenStreetMap in den Cookie-Einstellungen, um auch Gärten zu finden, die nur in OSM vorhanden sind.`;
     } else if (osmError) {
       error = "Fehler beim Laden der Kartendaten. Bitte versuchen Sie es erneut.";
-    } else if (gardenData && !osmWay) {
+    } else if (gardenData && !osmWay && pastGarden === null) {
       error = `Garten mit Nummer "${gardenNumber}" nicht gefunden.`;
     } else if (osmWay && !osmGarden) {
       error = "Garten gefunden, aber Geometrie konnte nicht verarbeitet werden.";
