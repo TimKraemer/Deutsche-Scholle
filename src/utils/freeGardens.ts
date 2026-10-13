@@ -31,7 +31,7 @@ function parseAvailableFrom(text: string): string {
   return match ? `${match[3]}-${match[2]}-${match[1]}` : text.toLowerCase();
 }
 
-export function parseFreeGardens(file: FreeGardensFile): Garden[] {
+export function parseFreeGardens(file: Pick<FreeGardensFile, "columns" | "rows">): Garden[] {
   const col = (name: string) => file.columns.indexOf(name);
   const idx = {
     number: col("Nr."),

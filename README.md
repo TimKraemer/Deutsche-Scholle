@@ -144,8 +144,9 @@ Browser ihn einmal im Hintergrund und merkt sich das Ergebnis im localStorage.
 bun test
 ```
 
-Die Tests in `src/utils/gardenData.test.ts` prüfen das Einlesen der Vereinsliste, die Filter und
-die Wahl der Parzelle. Die Parzelle aus der Vereinsliste gilt vor der aus OSM erratenen.
+Die Tests in `src/utils/gardenData.test.ts` prüfen das Einlesen der Vereinsliste, die Filter, die
+Wahl der Parzelle und die Auswertung des Verlaufs. `scripts/test_update_free_gardens.py` prüft das
+Anhängen an den Verlauf. Die Parzelle aus der Vereinsliste gilt vor der aus OSM erratenen.
 
 ### Liste der freien Gärten
 
@@ -159,6 +160,11 @@ erscheinen in der App als „n.V.“. Weil die Vereinsseite kein Stand-Datum nen
 Das Skript läuft beim Build (`bun run gardens:update`) und auf dem Server per Cron alle drei
 Stunden (Python 3, ohne Abhängigkeiten). Dort schreibt es direkt in den Web-Root, neue Gärten
 erscheinen also ohne Deploy. Schlägt der Abruf fehl, bleibt die vorhandene Datei bestehen.
+
+Jeder neue Stand der Liste wird außerdem an `public/freie-gaerten-verlauf.json` angehängt. Die
+älteren Stände ab Juli 2025 hat `scripts/import-free-gardens-history.py` einmalig von archive.org
+geholt, dazu einen im Repo abgetippten Stand vom Juni 2026. Die Debug-Seite zeigt daraus pro
+Garten, wann er frei war, wie oft und was sich an seinen Angaben geändert hat.
 
 ## 📁 Projektstruktur
 

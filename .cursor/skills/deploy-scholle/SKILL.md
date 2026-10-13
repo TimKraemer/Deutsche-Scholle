@@ -18,8 +18,8 @@ Run these from the project root:
 bun run build
 
 # 2. Sync dist/ to the server web root (mirrors, deletes removed files).
-#    freie-gaerten.json is excluded: the server cron job owns it (see below).
-rsync -az --delete --exclude=/freie-gaerten.json -e ssh dist/ scortex-vm:/var/www/www-scholle/
+#    freie-gaerten.json and freie-gaerten-verlauf.json are excluded: the server cron job owns them.
+rsync -az --delete --exclude=/freie-gaerten.json --exclude=/freie-gaerten-verlauf.json -e ssh dist/ scortex-vm:/var/www/www-scholle/
 
 # 3. Verify (expect HTTP 200; the SPA route must also return 200)
 curl -sS -o /dev/null -w "root: HTTP %{http_code}\n" https://scholle.tim-kraemer.de/
@@ -137,7 +137,13 @@ ssh scortex-vm 'docker logs --tail 60 nginx-proxy-acme 2>&1 | grep -i scholle'
 
 `~/scholle/update-free-gardens.py` (copy of `scripts/update-free-gardens.py`, Python 3 only, the
 server has no Bun/Node) runs from the `scortex` crontab every three hours and writes
-`/var/www/www-scholle/freie-gaerten.json`. Output goes to `~/scholle/update-free-gardens.log`.
+`/var/www/www-scholle/freie-gaerten.json`. Each changed state is also appended to
+`/var/www/www-scholle/freie-gaerten-verlauf.json` (history shown on `/debug`). Output goes to
+`~/scholle/update-free-gardens.log`.
+
+The server history is the master copy and grows on its own. Never overwrite it from the repo;
+`public/freie-gaerten-verlauf.json` is only the local copy (seeded once by
+`scripts/import-free-gardens-history.py` from archive.org).
 
 ```cron
 17 */3 * * * /usr/bin/python3 $HOME/scholle/update-free-gardens.py /var/www/www-scholle/freie-gaerten.json >> $HOME/scholle/update-free-gardens.log 2>&1

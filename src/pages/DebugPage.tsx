@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import FreeGardensHistory from "../components/FreeGardensHistory";
 import { loadCookiePreferences } from "../utils/cookies";
 import { getFreeGardens } from "../utils/freeGardens";
 import { getGardenData, osmWayToGarden, refreshGardenData } from "../utils/osm";
@@ -678,6 +679,8 @@ export default function DebugPage() {
                 </div>
               </div>
             </div>
+
+            <FreeGardensHistory onGardenClick={handleRowClick} />
           </>
         )}
       </div>

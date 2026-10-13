@@ -13,7 +13,7 @@
     "format": "bunx @biomejs/biome format --write .",
     "format:check": "bunx @biomejs/biome format .",
     "preview": "bun run vite preview",
-    "test": "bun test"
+    "test": "bun test && python3 -m unittest discover -s scripts -p 'test_*.py'"
   },
   "dependencies": {
     "@types/leaflet": "^1.9.21",

@@ -15,7 +15,8 @@
       "!**/build",
       "!**/coverage",
       "!public/osm-gardens.json",
-      "!public/freie-gaerten.json"
+      "!public/freie-gaerten.json",
+      "!public/freie-gaerten-verlauf.json"
     ]
   },
   "formatter": {
