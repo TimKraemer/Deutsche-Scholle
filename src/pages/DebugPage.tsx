@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import FreeGardensHistory from "../components/FreeGardensHistory";
+import type { GardenValue } from "../types/garden";
 import { loadCookiePreferences } from "../utils/cookies";
+import { formatDate, formatGardenValue, gardenValueToNumber } from "../utils/formatting";
 import { getFreeGardens } from "../utils/freeGardens";
+import {
+  type KnownGarden,
+  latestKnownGardens,
+  loadFreeGardensHistory,
+} from "../utils/freeGardensHistory";
 import { getGardenData, osmWayToGarden, refreshGardenData } from "../utils/osm";
 
 interface GardenSizeComparison {
@@ -13,11 +19,17 @@ interface GardenSizeComparison {
   percentageDiff: number | null;
   hasOsmData: boolean;
   parcel: string;
+  valuation: GardenValue;
+  seenAt: string; // Stand der Vereinsliste, aus dem die Angaben stammen
+  isCurrent: boolean; // gerade frei
+  source: string;
 }
 
 type SortColumn =
   | "number"
   | "parcel"
+  | "valuation"
+  | "seenAt"
   | "dbSize"
   | "osmSize"
   | "difference"
@@ -37,12 +49,31 @@ interface MissingOsmGarden {
   parcel: string;
 }
 
-/** Ein freier Garten, dessen Parzelle in der Vereinsliste anders lautet als in OSM */
+/** Ein Garten der Vereinsliste, dessen Parzelle dort anders lautet als in OSM */
 interface ParcelMismatch {
   number: string;
   listParcel: string;
   osmParcel: string;
   wayId: number;
+  seenAt: string;
+  isCurrent: boolean;
+}
+
+/**
+ * Alle Gärten, die je auf der Vereinsliste standen, mit ihren letzten Angaben. Ohne Verlauf
+ * nur die aktuelle Liste.
+ */
+async function loadKnownGardens(): Promise<KnownGarden[]> {
+  try {
+    return latestKnownGardens(await loadFreeGardensHistory());
+  } catch (error) {
+    console.error("Error loading free gardens history:", error);
+    const { gardens, changedAt } = await getFreeGardens().catch(() => ({
+      gardens: [],
+      changedAt: "",
+    }));
+    return gardens.map((garden) => ({ garden, date: changedAt, source: "", isCurrent: true }));
+  }
 }
 
 // Erwarteter Bereich der Gartennummern im Verein: 1 bis 1058 (durchgehend).
@@ -85,10 +116,7 @@ export default function DebugPage() {
   // forceRefresh=true holt frische Daten direkt von Overpass statt aus dem Snapshot.
   const computeResults = useCallback(async (forceRefresh: boolean): Promise<DebugResults> => {
     const results: GardenSizeComparison[] = [];
-    const { gardens: freeGardens } = await getFreeGardens().catch((error) => {
-      console.error("Error loading free gardens:", error);
-      return { gardens: [] };
-    });
+    const knownGardens = await loadKnownGardens();
 
     let allOsmGardens: any[] = [];
     let osmGeneratedAt: number | null = null;
@@ -138,9 +166,9 @@ export default function DebugPage() {
     }
     // Parzelle aus der Vereinsliste ergänzen, falls vorhanden (rein informativ).
     const numberToParcel = new Map<string, string>();
-    for (const listGarden of freeGardens) {
-      if (listGarden.parcel) {
-        numberToParcel.set(listGarden.number, listGarden.parcel);
+    for (const { garden } of knownGardens) {
+      if (garden.parcel) {
+        numberToParcel.set(garden.number, garden.parcel);
       }
     }
     const missingGardens: MissingOsmGarden[] = [];
@@ -154,10 +182,10 @@ export default function DebugPage() {
       }
     }
 
-    // Freie Gärten, deren Garten-Umriss in OSM in einer anders benannten Parzelle liegt.
-    // Ohne erkannte OSM-Parzelle gibt es nichts zu vergleichen.
+    // Gärten der Vereinsliste (auch früher freie), deren Umriss in OSM in einer anders
+    // benannten Parzelle liegt. Ohne erkannte OSM-Parzelle gibt es nichts zu vergleichen.
     const parcelMismatches: ParcelMismatch[] = [];
-    for (const listGarden of freeGardens) {
+    for (const { garden: listGarden, date, isCurrent } of knownGardens) {
       const osmWay = allOsmGardens.find((osm) => osm.tags?.ref === listGarden.number);
       const osmParcel = osmWay ? osmParcels[osmWay.id] : null;
       if (osmWay && osmParcel && listGarden.parcel.trim() !== osmParcel.trim()) {
@@ -166,58 +194,32 @@ export default function DebugPage() {
           listParcel: listGarden.parcel,
           osmParcel,
           wayId: osmWay.id,
+          seenAt: date,
+          isCurrent,
         });
       }
     }
     parcelMismatches.sort((a, b) => (parseInt(a.number, 10) || 0) - (parseInt(b.number, 10) || 0));
 
-    // Verarbeite jeden Garten aus der Datenbank
-    for (const listGarden of freeGardens) {
+    // Größe laut Vereinsliste gegen die aus dem OSM-Umriss berechnete Fläche
+    for (const { garden: listGarden, date, source, isCurrent } of knownGardens) {
       const dbSize = listGarden.size || 0;
-
-      // Suche nach OSM-Daten für diesen Garten
-      const osmWay = allOsmGardens.find((osm) => osm.tags?.ref === listGarden.number) || null;
-
-      if (osmWay) {
-        // Kombiniere OSM-Daten mit der Vereinsliste
-        const garden = osmWayToGarden(osmWay, listGarden);
-
-        if (garden && garden.osmSize !== undefined && garden.osmSize !== null) {
-          const osmSize = garden.osmSize;
-          const difference = osmSize - dbSize;
-          const percentageDiff = dbSize > 0 ? (difference / dbSize) * 100 : null;
-
-          results.push({
-            number: listGarden.number,
-            dbSize,
-            osmSize,
-            difference,
-            percentageDiff,
-            hasOsmData: true,
-            parcel: listGarden.parcel || "-",
-          });
-        } else {
-          results.push({
-            number: listGarden.number,
-            dbSize,
-            osmSize: null,
-            difference: null,
-            percentageDiff: null,
-            hasOsmData: false,
-            parcel: listGarden.parcel || "-",
-          });
-        }
-      } else {
-        results.push({
-          number: listGarden.number,
-          dbSize,
-          osmSize: null,
-          difference: null,
-          percentageDiff: null,
-          hasOsmData: false,
-          parcel: listGarden.parcel || "-",
-        });
-      }
+      const osmWay = allOsmGardens.find((osm) => osm.tags?.ref === listGarden.number);
+      const osmSize = osmWay ? (osmWayToGarden(osmWay, listGarden)?.osmSize ?? null) : null;
+      const difference = osmSize !== null ? osmSize - dbSize : null;
+      results.push({
+        number: listGarden.number,
+        dbSize,
+        osmSize,
+        difference,
+        percentageDiff: difference !== null && dbSize > 0 ? (difference / dbSize) * 100 : null,
+        hasOsmData: osmSize !== null,
+        parcel: listGarden.parcel || "-",
+        valuation: listGarden.valuation,
+        seenAt: date,
+        isCurrent,
+        source,
+      });
     }
 
     return {
@@ -285,6 +287,14 @@ export default function DebugPage() {
         }
         case "parcel":
           comparison = (a.parcel || "").localeCompare(b.parcel || "");
+          break;
+        case "valuation":
+          comparison = gardenValueToNumber(a.valuation) - gardenValueToNumber(b.valuation);
+          break;
+        case "seenAt":
+          // Gerade freie Gärten zuletzt, sie haben den neuesten Stand
+          comparison =
+            Number(a.isCurrent) - Number(b.isCurrent) || a.seenAt.localeCompare(b.seenAt);
           break;
         case "dbSize":
           comparison = (a.dbSize || 0) - (b.dbSize || 0);
@@ -363,8 +373,8 @@ export default function DebugPage() {
             Debug: Größenvergleich Datenbank vs. OSM
           </h1>
           <p className="text-scholle-text-light">
-            Vergleich der Größenangaben aus der Datenbank mit den aus OSM-Geometrie berechneten
-            Werten
+            Angaben aller Gärten, die je auf der Vereinsliste standen (aktuell und von archive.org),
+            verglichen mit den Umrissen in OSM
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
@@ -484,7 +494,7 @@ export default function DebugPage() {
                 </div>
                 {parcelMismatches.length === 0 ? (
                   <p className="px-4 py-6 text-sm text-scholle-text-light text-center">
-                    Bei allen freien Gärten stimmt die Parzelle mit OSM überein.
+                    Bei allen Gärten der Vereinsliste stimmt die Parzelle mit OSM überein.
                   </p>
                 ) : (
                   <ul className="divide-y divide-scholle-border">
@@ -503,6 +513,9 @@ export default function DebugPage() {
                         <span className="flex flex-col items-end text-xs text-right">
                           <span className="text-scholle-text">Verein: {m.listParcel}</span>
                           <span className="text-scholle-text-light">OSM: {m.osmParcel}</span>
+                          <span className="text-scholle-text-light">
+                            {m.isCurrent ? "gerade frei" : `Stand ${formatDate(m.seenAt)}`}
+                          </span>
                           <a
                             href={`https://www.openstreetmap.org/way/${m.wayId}`}
                             target="_blank"
@@ -517,8 +530,9 @@ export default function DebugPage() {
                   </ul>
                 )}
                 <div className="px-4 py-2 bg-scholle-bg-light border-t border-scholle-border text-xs text-scholle-text-light">
-                  Freie Gärten, deren Umriss in OSM in einer anders benannten Parzelle liegt. Falsch
-                  ist entweder der Gartenumriss (ref) oder die Parzellenfläche in OSM.
+                  Gärten der Vereinsliste, auch früher freie, deren Umriss in OSM in einer anders
+                  benannten Parzelle liegt. Falsch ist entweder der Gartenumriss (ref) oder die
+                  Parzellenfläche in OSM.
                 </div>
               </div>
             </div>
@@ -595,6 +609,28 @@ export default function DebugPage() {
                         </div>
                       </th>
                       <th
+                        className="px-4 py-3 text-right text-sm font-semibold cursor-pointer hover:bg-scholle-green-dark select-none"
+                        onClick={() => handleSort("valuation")}
+                      >
+                        <div className="flex items-center justify-end gap-2">
+                          Wert
+                          {sortColumn === "valuation" && (
+                            <span>{sortDirection === "asc" ? "▲" : "▼"}</span>
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        className="px-4 py-3 text-left text-sm font-semibold cursor-pointer hover:bg-scholle-green-dark select-none"
+                        onClick={() => handleSort("seenAt")}
+                      >
+                        <div className="flex items-center gap-2">
+                          Stand Vereinsliste
+                          {sortColumn === "seenAt" && (
+                            <span>{sortDirection === "asc" ? "▲" : "▼"}</span>
+                          )}
+                        </div>
+                      </th>
+                      <th
                         className="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-scholle-green-dark select-none"
                         onClick={() => handleSort("status")}
                       >
@@ -648,6 +684,26 @@ export default function DebugPage() {
                               ? `${comp.percentageDiff > 0 ? "+" : ""}${comp.percentageDiff.toFixed(1)}%`
                               : "-"}
                           </td>
+                          <td className="px-4 py-3 text-sm text-right text-scholle-text whitespace-nowrap">
+                            {formatGardenValue(comp.valuation, { maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-scholle-text-light whitespace-nowrap">
+                            {comp.isCurrent ? (
+                              <span className="text-scholle-green font-medium">gerade frei</span>
+                            ) : comp.source.startsWith("http") ? (
+                              <a
+                                href={comp.source}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-scholle-blue hover:text-scholle-blue-dark underline"
+                              >
+                                {formatDate(comp.seenAt)}
+                              </a>
+                            ) : (
+                              <span title={comp.source}>{formatDate(comp.seenAt)}</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-center">
                             {comp.hasOsmData ? (
                               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -668,7 +724,10 @@ export default function DebugPage() {
 
               <div className="px-4 py-3 bg-scholle-bg-light border-t border-scholle-border">
                 <div className="flex items-center justify-between text-sm text-scholle-text-light">
-                  <div>Gesamt: {comparisons.length} Gärten</div>
+                  <div>
+                    Gesamt: {comparisons.length} Gärten, davon{" "}
+                    {comparisons.filter((c) => c.isCurrent).length} gerade frei
+                  </div>
                   <div>
                     Mit OSM-Daten: {comparisons.filter((c) => c.hasOsmData).length} | Ohne
                     OSM-Daten: {comparisons.filter((c) => !c.hasOsmData).length}
@@ -679,8 +738,6 @@ export default function DebugPage() {
                 </div>
               </div>
             </div>
-
-            <FreeGardensHistory onGardenClick={handleRowClick} />
           </>
         )}
       </div>

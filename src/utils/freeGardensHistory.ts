@@ -18,23 +18,12 @@ export interface HistorySnapshot {
   gardens: Garden[];
 }
 
-const TRACKED_FIELDS = ["parcel", "size", "availableFrom", "valuation", "valueReduction"] as const;
-
-export interface GardenChange {
-  date: string;
-  field: (typeof TRACKED_FIELDS)[number];
-  from: Garden[(typeof TRACKED_FIELDS)[number]];
-  to: Garden[(typeof TRACKED_FIELDS)[number]];
-}
-
-export interface GardenHistory {
-  number: string;
-  parcel: string; // zuletzt bekannte Parzelle
-  firstSeen: string; // erster Stand, in dem der Garten frei war
-  lastSeen: string; // letzter Stand, in dem er frei war
-  goneBy: string | null; // erster Stand danach ohne den Garten, null = im letzten Stand frei
-  periods: number; // wie oft der Garten frei wurde
-  changes: GardenChange[]; // geänderte Angaben gegenüber dem vorherigen Auftauchen
+/** Ein Garten mit den zuletzt bekannten Angaben aus der Vereinsliste */
+export interface KnownGarden {
+  garden: Garden;
+  date: string; // Stand, aus dem die Angaben stammen
+  source: string;
+  isCurrent: boolean; // steht im neuesten Stand, ist also gerade frei
 }
 
 export async function loadFreeGardensHistory(): Promise<HistorySnapshot[]> {
@@ -50,54 +39,26 @@ export async function loadFreeGardensHistory(): Promise<HistorySnapshot[]> {
   }));
 }
 
-/** Fasst den Verlauf pro Garten zusammen. Erwartet die Stände nach Datum sortiert. */
-export function summarizeHistory(snapshots: HistorySnapshot[]): GardenHistory[] {
-  const byNumber = new Map<string, GardenHistory>();
-  const lastKnown = new Map<string, Garden>();
-  let previous = new Set<string>();
-
+/**
+ * Jeder Garten, der je auf der Liste stand, mit seinen letzten Angaben. So lassen sich auch
+ * Parzelle und Größe früher freier Gärten gegen OSM prüfen. Erwartet die Stände nach Datum sortiert.
+ */
+export function latestKnownGardens(snapshots: HistorySnapshot[]): KnownGarden[] {
+  const newest = snapshots.at(-1);
+  const latest = new Map<string, KnownGarden>();
   for (const snapshot of snapshots) {
-    const current = new Set(snapshot.gardens.map((g) => g.number));
     for (const garden of snapshot.gardens) {
-      const entry = byNumber.get(garden.number);
-      const last = lastKnown.get(garden.number);
-      lastKnown.set(garden.number, garden);
-      if (!entry || !last) {
-        byNumber.set(garden.number, {
-          number: garden.number,
-          parcel: garden.parcel,
-          firstSeen: snapshot.date,
-          lastSeen: snapshot.date,
-          goneBy: null,
-          periods: 1,
-          changes: [],
-        });
-        continue;
-      }
-      if (!previous.has(garden.number)) {
-        entry.periods += 1;
-      }
-      for (const field of TRACKED_FIELDS) {
-        if (garden[field] !== last[field]) {
-          entry.changes.push({ date: snapshot.date, field, from: last[field], to: garden[field] });
-        }
-      }
-      entry.parcel = garden.parcel;
-      entry.lastSeen = snapshot.date;
-      entry.goneBy = null;
+      latest.set(garden.number, {
+        garden,
+        date: snapshot.date,
+        source: snapshot.source,
+        isCurrent: snapshot === newest,
+      });
     }
-    for (const number of previous) {
-      const entry = byNumber.get(number);
-      if (entry && !current.has(number)) {
-        entry.goneBy = snapshot.date;
-      }
-    }
-    previous = current;
   }
-
-  return [...byNumber.values()].sort(
+  return [...latest.values()].sort(
     (a, b) =>
-      (Number.parseInt(a.number, 10) || 0) - (Number.parseInt(b.number, 10) || 0) ||
-      a.number.localeCompare(b.number)
+      (Number.parseInt(a.garden.number, 10) || 0) - (Number.parseInt(b.garden.number, 10) || 0) ||
+      a.garden.number.localeCompare(b.garden.number)
   );
 }

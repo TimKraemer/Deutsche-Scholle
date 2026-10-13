@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { ON_REQUEST } from "../types/garden";
 import { parseFreeGardens } from "./freeGardens";
-import { summarizeHistory } from "./freeGardensHistory";
+import { latestKnownGardens } from "./freeGardensHistory";
 import { applyGardenFilters, calculateRanges, isAvailableNow } from "./gardenFilters";
 import { osmWayToGarden } from "./osm";
 
@@ -65,21 +65,17 @@ test("osmWayToGarden übernimmt die Parzelle der Vereinsliste vor der aus OSM", 
   expect(osmWayToGarden(way, undefined, "Johannisgärten 1")?.parcel).toBe("Johannisgärten 1");
 });
 
-test("summarizeHistory: Zeitraum, erneut frei und geänderte Angaben je Garten", () => {
+test("latestKnownGardens: jeder je freie Garten mit seinen letzten Angaben", () => {
   const garden = (number: string, size = 400) => ({ ...gardens[0], id: number, number, size });
-  const history = summarizeHistory([
-    { date: "2025-01-01", source: "a", gardens: [garden("1", 300), garden("3")] },
-    { date: "2025-02-01", source: "b", gardens: [garden("1", 310), garden("2")] },
+  const known = latestKnownGardens([
+    { date: "2025-01-01", source: "a", gardens: [garden("10", 300), garden("3")] },
+    { date: "2025-02-01", source: "b", gardens: [garden("10", 310), garden("2")] },
     { date: "2025-03-01", source: "c", gardens: [garden("2")] },
-    { date: "2025-04-01", source: "d", gardens: [garden("1", 310), garden("2")] },
   ]);
-  expect(history.map((h) => h.number)).toEqual(["1", "2", "3"]);
-  expect(history[0]).toMatchObject({
-    firstSeen: "2025-01-01",
-    lastSeen: "2025-04-01",
-    goneBy: null,
-    periods: 2,
-    changes: [{ date: "2025-02-01", field: "size", from: 300, to: 310 }],
-  });
-  expect(history[2]).toMatchObject({ lastSeen: "2025-01-01", goneBy: "2025-02-01", periods: 1 });
+  expect(known.map((k) => [k.garden.number, k.date, k.isCurrent])).toEqual([
+    ["2", "2025-03-01", true],
+    ["3", "2025-01-01", false],
+    ["10", "2025-02-01", false],
+  ]);
+  expect(known[2].garden.size).toBe(310);
 });
